@@ -484,12 +484,26 @@ function withWordStop(s) {
    키: 표제어(word) 또는 읽기(reading) / 값: 엔진에 보낼 텍스트(구두점·가타카나 등 직접 제어).
    예) うっとり → 엔진이 'うっ(감탄사)+とり'로 끊어 읽어, 한 단어로 인식되기 쉬운 가타카나로. */
 const WORD_SPEECH_OVERRIDE = {
+  "稟議": "りんぎ",
+  "上半期": "かみはんき",
+  "下半期": "しもはんき",
+  "直行直帰": "ちょっこうちょっき",
+  "有休消化": "ゆうきゅうしょうか",
+  "UI改善": "ゆーあいかいぜん",
+  "IPライセンス": "あいぴーらいせんす",
+  "五月雨": "さみだれ",
+  "四桁": "よんけた",
+  "目処": "めど",
+  "人事": "じんじ",
   "うっとり": "ウットリ",
   "下振れ": "シタブレ", // 下振れ가 'すたぶれ'로 들려 가타카나로 한 단어 인식
   "〜こととて": "〜事とて",            // こと|とて 과분절 방지
   "相まって": "あいまって",            // 한자원문이면 相=ソウ 오독
   "~と~とが相まって": "~と~とがあいまって",
   "〜つ〜つ": "〜つ、〜つ",            // なになにつなになにつ 붙음 방지
+  "本音": "ほんね",                    // 한자원문이면 音=おん 오독(ほんおん)
+  "～中": "なになにじゅう", "~中": "なになにじゅう", "〜中": "なになにじゅう", // ~中=じゅう(なか 오독 방지)
+  "スタート": "すたーと",              // 가타카나 오독(セト) → 히라가나로
 };
 function wordSpeech(card) {
   const ov = WORD_SPEECH_OVERRIDE[card.word] || (card.reading && WORD_SPEECH_OVERRIDE[card.reading]);
@@ -1173,18 +1187,49 @@ const Icon = {
 };
 
 /* 후리가나 토큰 렌더링: showFuri면 한자(t)에 (r) 괄호 읽기 부여 */
+/* 토큰(표면,읽기)을 한자런/가나런으로 정렬해 한자 뒤에만 읽기를 붙인다.
+   예: 諦めるまでのことだ + あきらめるまでのことだ → 諦(あきら)めるまでのことだ. 실패 시 통짜 폴백. */
+function alignFurigana(surface, reading) {
+  if (!reading || reading === surface) return [{ t: surface, r: null }];
+  const segs = []; let i = 0;
+  while (i < surface.length) {
+    const k = isKanjiChar(surface[i]);
+    let j = i + 1; while (j < surface.length && isKanjiChar(surface[j]) === k) j++;
+    segs.push({ kanji: k, s: surface.slice(i, j) }); i = j;
+  }
+  const out = []; let pos = 0;
+  for (let si = 0; si < segs.length; si++) {
+    const seg = segs[si];
+    if (seg.kanji) {
+      const nextKana = (segs[si + 1] && !segs[si + 1].kanji) ? segs[si + 1].s : null;
+      if (nextKana) {
+        const idx = reading.indexOf(nextKana, pos);
+        if (idx < 0) return [{ t: surface, r: reading }];
+        out.push({ t: seg.s, r: reading.slice(pos, idx) || null }); pos = idx;
+      } else { out.push({ t: seg.s, r: reading.slice(pos) || null }); pos = reading.length; }
+    } else {
+      const idx = reading.indexOf(seg.s, pos);
+      if (idx < 0) return [{ t: surface, r: reading }];
+      out.push({ t: seg.s, r: null }); pos = idx + seg.s.length;
+    }
+  }
+  if (pos !== reading.length) return [{ t: surface, r: reading }];
+  return out;
+}
 function FuriganaText({ tokens, showFuri }) {
   return (
     <>
-      {tokens.map((tk, i) =>
-        showFuri && tk.r ? (
+      {tokens.map((tk, i) => {
+        if (!(showFuri && tk.r)) return <span key={i}>{tk.t}</span>;
+        const parts = alignFurigana(tk.t, tk.r);
+        return (
           <span key={i} className="furi-wrap">
-            {tk.t}<span className="furi-paren">({tk.r})</span>
+            {parts.map((pp, j) => pp.r
+              ? <span key={j}>{pp.t}<span className="furi-paren">({pp.r})</span></span>
+              : <span key={j}>{pp.t}</span>)}
           </span>
-        ) : (
-          <span key={i}>{tk.t}</span>
-        )
-      )}
+        );
+      })}
     </>
   );
 }
@@ -1307,7 +1352,7 @@ function DetailModal({ card, onClose, voiceRef, allCards }) {
 
             {info ? (
               <>
-                {info.kr && <div className="kanji-kr">{info.kr}</div>}
+                <div className="kanji-kr">{info.kr || "(일본한자)"}</div>
                 <div className="kanji-rows">
                   {info.on && info.on.length > 0 && (
                     <div className="kanji-row">
@@ -4698,9 +4743,8 @@ function App() {
   }, [cards]);
 
   const refresh = useCallback(async () => {
-    // ===ADAPTER===: 실제 배포 시 서버에서 최신 단어/스케줄 동기화.
-    await new Promise((r) => setTimeout(r, 400));
-    setVersion((v) => v + 1);
+    // 당겨서 새로고침 = 페이지 전체 강제 새로고침(소프트 re-render 아님). 최신 배포 반영.
+    try { window.location.reload(); } catch (_) { setVersion((v) => v + 1); }
   }, []);
 
   const ptr = usePullToRefresh(refresh);
