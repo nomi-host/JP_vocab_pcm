@@ -1560,6 +1560,15 @@ function StudyView({ cards, setCards, voiceRef, timeLog, session, setSession, de
     }
   }, [session]);
 
+  // 자가복구: 세션은 시작됐는데 현재 카드를 못 찾는(데이터 변동 등으로 큐가 깨진) 경우 → 오늘 학습 큐로 재구성.
+  // (이어서 학습 시 '학습할 카드가 없어요'로 막히던 문제 방지)
+  useEffect(() => {
+    if (session && session.started && !session.done && (session.queue || []).length > 0 && !current) {
+      const q = buildQueue(cardsRef.current, undefined, level).map((c) => c.id);
+      if (q.length) setSession({ queue: q, pos: 0, doneCount: 0, total: q.length, extraLimit: NEW_PER_DAY, started: true, done: false, dismissed: false });
+    }
+  }, [session, current]);
+
   const advance = (known) => {
     setCards((prev) => prev.map((c) => (c.id === currentId ? gradeCard(c, known) : c)));
     setSession((prev) => {
@@ -1652,8 +1661,8 @@ function StudyView({ cards, setCards, voiceRef, timeLog, session, setSession, de
     setExtraMsg("");
     setSeconds(0);
     setSession((prev) => {
-      // 진행 중(아직 완료 전, 남은 카드 있음)일 때만 이어붙임. 완료/소진 상태면 새 세션.
-      if (prev && prev.queue && prev.queue.length && prev.pos < prev.queue.length && !prev.done) {
+      // 진행 중(완료 전, 남은 카드 있음, 현재 카드 유효)일 때만 이어붙임. 아니면 새 세션.
+      if (prev && prev.queue && prev.queue.length && prev.pos < prev.queue.length && !prev.done && current) {
         const have = new Set(prev.queue);
         const add = ids.filter((id) => !have.has(id)); // 중복 제외
         return { ...prev, queue: [...prev.queue, ...add], total: prev.total + add.length, started: true, done: false, dismissed: false };
@@ -4703,10 +4712,8 @@ function App() {
         <style>{CSS}</style>
         <OnboardingView onDone={(lv) => {
           const o = { level: lv, done: true }; saveOnboard(o); setOnboard(o);
-          // iOS 잔상 방지: 온보딩(전체 노랑 fixed) 제거 후 상단이 노랗게 남는 컴포지팅 버그 → 강제 리페인트
-          requestAnimationFrame(() => requestAnimationFrame(() => {
-            try { const b = document.body; b.style.display = "none"; void b.offsetHeight; b.style.display = ""; } catch (_) {}
-          }));
+          // iOS 잔상(온보딩 노란 배경) 확실히 제거: 완료 후 1회 전체 새로고침. onboard는 저장돼 바로 학습화면으로 진입.
+          setTimeout(() => { try { window.location.reload(); } catch (_) {} }, 80);
         }} />
       </div>
     );
