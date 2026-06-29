@@ -7,13 +7,14 @@
 // ※ 하드 보장(분산 인스턴스 무관)이 필요하면 Vercel KV/Upstash로 교체. 현재는 best-effort(인메모리).
 
 // ── 허용 출처 ───────────────────────────────────────────────
-// 내 도메인에서만 호출 허용(+localhost 테스트, +동일출처). 다른 vercel 앱은 차단.
+// 내 앱(같은 도메인)에서만 호출 허용. 같은 출처면 도메인이 뭐든(pitto-voca / 미리보기 해시 URL / 커스텀 도메인) 통과.
 const ALLOWED_EXACT = ["https://pitto-voca.vercel.app"];
-function isAllowedOrigin(origin) {
-  if (!origin) return true; // 동일출처(정적+함수 같은 프로젝트)면 Origin 없을 수 있음
+function isAllowedOrigin(origin, host) {
+  if (!origin) return true; // 동일출처 요청은 Origin이 없을 수 있음
   if (ALLOWED_EXACT.includes(origin)) return true;
   try {
     const u = new URL(origin);
+    if (host && u.host === host) return true; // same-origin(프론트=함수 같은 배포) → 도메인 무관 허용
     if (u.protocol === "http:" && (u.hostname === "localhost" || u.hostname === "127.0.0.1")) return true;
   } catch (_) {}
   return false;
@@ -91,13 +92,14 @@ async function callTts(body) {
 
 module.exports = async (req, res) => {
   const origin = req.headers.origin || "";
-  if (isAllowedOrigin(origin)) res.setHeader("Access-Control-Allow-Origin", origin || "*");
+  const host = req.headers.host || "";
+  if (isAllowedOrigin(origin, host)) res.setHeader("Access-Control-Allow-Origin", origin || "*");
   res.setHeader("Vary", "Origin");
   res.setHeader("Access-Control-Allow-Methods", "POST, OPTIONS");
   res.setHeader("Access-Control-Allow-Headers", "Content-Type");
   if (req.method === "OPTIONS") { res.status(204).end(); return; }
   if (req.method !== "POST") { res.status(405).json({ error: "POST only" }); return; }
-  if (origin && !isAllowedOrigin(origin)) { res.status(403).json({ error: "forbidden origin" }); return; }
+  if (origin && !isAllowedOrigin(origin, host)) { res.status(403).json({ error: "forbidden origin" }); return; }
 
   let body = req.body;
   if (typeof body === "string") { try { body = JSON.parse(body); } catch (_) { body = {}; } }

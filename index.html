@@ -191,14 +191,15 @@ const fmtClock = (s) => {
 // Leitner 박스별 다음 복습 간격(일). 망각곡선 근사.
 const BOX_INTERVALS = [0, 1, 2, 4, 8, 16, 32];
 const MAX_BOX = BOX_INTERVALS.length - 1;
-const NEW_PER_DAY = 20;        // 하루 신규 상한(복습 없는 날 신규로 채우는 최대치)
+const NEW_PER_DAY = 30;        // 하루 신규 상한(복습 없는 날 신규로 채우는 최대치)
 const DAILY_TOTAL = 30;        // 오늘의 학습 하루 총량(복습+신규) 상한
-const NEW_RATIO_MIN = 0.2;     // 신규 최소 비율(20%) — 복습이 쌓여도 신규 자리 보장
+const NEW_RATIO_MIN = 0.3;     // 신규 최소 비율(30%) — 복습이 쌓여도 신규 자리 보장
 
 // 앱 버전/배포일 (정식 배포 시 v1.0으로). 통계탭 하단 워터마크 표시.
 const APP_VERSION = "v0.1";
 const APP_BUILD = "2026-06-29";
 const FEEDBACK_EMAIL = "micki.02@kakaopiccoma.com";
+const FEEDBACK_URL = "https://script.google.com/macros/s/REPLACE_FEEDBACK_DEPLOY_ID/exec"; // 제보 메일 발송용 GAS 웹앱
 
 function hasKanji(s) {
   for (const ch of s) if (ch >= "\u4e00" && ch <= "\u9fff") return true;
@@ -3932,26 +3933,44 @@ function QuizView({ cards, setCards, setQuizLog }) {
 /* 오류 제보 · 기능 요청 — 작성 후 메일 앱으로 전송(mailto). */
 function FeedbackBox() {
   const [open, setOpen] = useState(false);
+  const [name, setName] = useState("");
   const [text, setText] = useState("");
-  const send = () => {
-    const body = encodeURIComponent((text || "").trim() + "\n\n----\nピッ!とVOCA " + APP_VERSION + " (" + APP_BUILD + ")\n" + (navigator.userAgent || ""));
-    const subject = encodeURIComponent("[ピッ!とVOCA] 오류 제보 · 기능 요청");
-    window.location.href = "mailto:" + FEEDBACK_EMAIL + "?subject=" + subject + "&body=" + body;
-    setOpen(false); setText("");
+  const [status, setStatus] = useState(""); // "" | sending | ok | fail
+  const send = async () => {
+    if (!text.trim() || status === "sending") return;
+    setStatus("sending");
+    try {
+      const r = await fetch(FEEDBACK_URL, {
+        method: "POST",
+        headers: { "Content-Type": "text/plain;charset=utf-8" }, // 단순요청(CORS preflight 회피)
+        body: JSON.stringify({ name: name.trim(), message: text.trim(), ver: APP_VERSION, ua: navigator.userAgent || "" }),
+        redirect: "follow",
+      });
+      let ok = r.ok;
+      try { const d = await r.json(); if (d && d.error) ok = false; } catch (_) {}
+      if (!ok) throw new Error("send failed");
+      setStatus("ok"); setText(""); setName("");
+      setTimeout(() => { setStatus(""); setOpen(false); }, 1200);
+    } catch (e) { setStatus("fail"); }
   };
   return (
     <div className="feedback-box">
-      <button className="feedback-open" onClick={() => setOpen(true)}>오류 제보 · 기능 요청</button>
+      <button className="feedback-open" onClick={() => { setStatus(""); setOpen(true); }}>오류 제보 · 기능 요청</button>
       {open && (
         <div className="fb-overlay" onClick={() => setOpen(false)}>
           <div className="fb-modal" onClick={(e) => e.stopPropagation()}>
             <div className="fb-title">오류 제보 · 기능 요청</div>
-            <div className="fb-sub">불편한 점이나 추가됐으면 하는 기능을 적어주세요. 메일 앱으로 전송돼요.</div>
+            <div className="fb-sub">불편한 점이나 추가됐으면 하는 기능을 적어주세요. 바로 전송돼요.</div>
+            <input className="fb-name" value={name} onChange={(e) => setName(e.target.value)} placeholder="이름 (선택)" />
             <textarea className="fb-text" value={text} onChange={(e) => setText(e.target.value)} rows={5}
               placeholder="예) OO 단어 발음이 이상해요 / OO 기능이 있으면 좋겠어요" />
+            {status === "ok" && <div className="fb-msg ok">보냈어요. 감사합니다!</div>}
+            {status === "fail" && <div className="fb-msg fail">전송에 실패했어요. 잠시 후 다시 시도해 주세요.</div>}
             <div className="fb-btns">
               <button className="fb-cancel" onClick={() => setOpen(false)}>취소</button>
-              <button className="fb-send" disabled={!text.trim()} onClick={send}>글 써서 보내기</button>
+              <button className="fb-send" disabled={!text.trim() || status === "sending"} onClick={send}>
+                {status === "sending" ? "보내는 중…" : "보내기"}
+              </button>
             </div>
           </div>
         </div>
@@ -4682,7 +4701,13 @@ function App() {
     return (
       <div className="app" style={STYLE_VARS}>
         <style>{CSS}</style>
-        <OnboardingView onDone={(lv) => { const o = { level: lv, done: true }; saveOnboard(o); setOnboard(o); }} />
+        <OnboardingView onDone={(lv) => {
+          const o = { level: lv, done: true }; saveOnboard(o); setOnboard(o);
+          // iOS 잔상 방지: 온보딩(전체 노랑 fixed) 제거 후 상단이 노랗게 남는 컴포지팅 버그 → 강제 리페인트
+          requestAnimationFrame(() => requestAnimationFrame(() => {
+            try { const b = document.body; b.style.display = "none"; void b.offsetHeight; b.style.display = ""; } catch (_) {}
+          }));
+        }} />
       </div>
     );
   }
@@ -5438,6 +5463,11 @@ html, body { overscroll-behavior-x: none; overflow-x: hidden; }
 .fb-modal { width: 100%; max-width: 380px; background: var(--surface); border-radius: 18px; padding: 20px; }
 .fb-title { font-size: 17px; font-weight: 800; color: var(--ink); }
 .fb-sub { font-size: 12.5px; color: var(--muted); margin: 6px 0 12px; line-height: 1.5; word-break: keep-all; }
+.fb-name { width: 100%; box-sizing: border-box; border: 1px solid var(--line); border-radius: 12px;
+  padding: 11px 12px; font-size: 14px; font-family: inherit; color: var(--ink); background: var(--bg); margin-bottom: 8px; }
+.fb-msg { font-size: 13px; font-weight: 700; margin-top: 10px; text-align: center; }
+.fb-msg.ok { color: #2e9e5b; }
+.fb-msg.fail { color: #d33; }
 .fb-text { width: 100%; box-sizing: border-box; border: 1px solid var(--line); border-radius: 12px;
   padding: 12px; font-size: 14px; font-family: inherit; resize: vertical; color: var(--ink); background: var(--bg); }
 .fb-btns { display: flex; gap: 10px; margin-top: 14px; }
