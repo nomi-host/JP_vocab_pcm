@@ -10,6 +10,13 @@
 <title>ピッ!とVOCA</title>
 <link rel="apple-touch-icon" href="img/home-icon.png" />
 <link rel="manifest" href="manifest.json" />
+<!-- 첫 사용자 가이드 아이콘: 가이드 모달이 뜰 때(앱 로드 후 0.45초)까지 미리 받아둬서
+     "아이콘이 늦게 팝인" 되는 현상을 막는다(words.js 등 큰 스크립트와 병렬로 받음). -->
+<link rel="preload" as="image" href="img/icons-01.png" />
+<link rel="preload" as="image" href="img/icons-02.png" />
+<link rel="preload" as="image" href="img/icons-03.png" />
+<link rel="preload" as="image" href="img/icons-04.png" />
+<link rel="preload" as="image" href="img/icons-05.png" />
 <script crossorigin src="https://unpkg.com/react@18.3.1/umd/react.production.min.js"></script>
 <script crossorigin src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.production.min.js"></script>
 <script src="https://unpkg.com/@babel/standalone@7.25.6/babel.min.js"></script>
@@ -283,7 +290,7 @@ const DAILY_TOTAL = 30;        // 오늘의 학습 하루 총량(복습+신규) 
 const NEW_RATIO_MIN = 0.3;     // 신규 최소 비율(30%) — 복습이 쌓여도 신규 자리 보장
 
 // 앱 버전/배포일 (정식 배포 시 v1.0으로). 통계탭 하단 워터마크 표시.
-const APP_VERSION = "v0.2.2";
+const APP_VERSION = "v0.2.3";
 const APP_BUILD = "2026-06-30";
 const FEEDBACK_EMAIL = "micki.02@kakaopiccoma.com";
 const FEEDBACK_URL = "https://script.google.com/macros/s/AKfycbyCuoe-Oa7hpb4tKlkeyiG3LFVWaLMTZG9M5wUxChsFzI12kGQEaGLhdLyuuAoLhktc/exec"; // 제보 메일 발송용 GAS 웹앱
@@ -2294,6 +2301,16 @@ function clearListenSession() {
   try { localStorage.removeItem(LISTEN_SESSION_KEY); } catch {}
 }
 
+// 흘려듣기 30단어 목록 캐시: 범위(scope)가 같으면 같은 목록을 재사용(오디오 재굽기 방지),
+// 범위가 바뀌면 새로 무작위 선정. 날짜는 더 이상 기준으로 쓰지 않는다(범위 기준으로 변경).
+const BG_LIST_KEY = "jp-vocab-bglist-v1";
+function loadBgListCache() {
+  try { const raw = localStorage.getItem(BG_LIST_KEY); return raw ? JSON.parse(raw) : null; } catch { return null; }
+}
+function saveBgListCache(scopeKey, ids) {
+  try { localStorage.setItem(BG_LIST_KEY, JSON.stringify({ scopeKey, ids })); } catch {}
+}
+
 /* ============================================================================
    백그라운드(음성만) 재생용 — 큐 전체를 단일 MP3로 "구워서" 재생.
    iOS Safari는 백그라운드/잠금에서 JS를 멈춰 클립을 이어 재생하지 못한다.
@@ -2436,13 +2453,35 @@ function saveListenSettings(s) {
   try { localStorage.setItem(LISTEN_KEY, JSON.stringify(s)); } catch {}
 }
 
-function ListenView({ cards, voiceRef, decks }) {
+function ListenView({ cards, setCards, voiceRef, decks, setDecks }) {
   const [cfg, setCfg] = useState(loadListenSettings);
   const [playing, setPlaying] = useState(false);
   const [idx, setIdx] = useState(0);        // 현재 카드 인덱스
   const [phase, setPhase] = useState("");   // 현재 단계 표시(일/뜻/예문/예문뜻)
   const [queue, setQueue] = useState([]);   // 재생할 카드 배열
   const [bgDetailCard, setBgDetailCard] = useState(null); // 흘려듣기 중 살펴보는 단어(상세 모달)
+
+  // 흘려듣기 상세에서도 즐겨찾기·학습대기·단어장 액션을 쓸 수 있게(ListView와 동일 로직).
+  const toggleStar = (id) => {
+    setCards((prev) => prev.map((c) => (c.id === id ? { ...c, starred: !c.starred } : c)));
+  };
+  const togglePriority = (id) => {
+    setCards((prev) => prev.map((c) => (c.id === id ? { ...c, priority: !c.priority } : c)));
+  };
+  const toggleCardDeck = (cardId, deckId) => {
+    setCards((prev) => prev.map((c) => {
+      if (c.id !== cardId) return c;
+      const cur = c.decks || [];
+      return { ...c, decks: cur.includes(deckId) ? cur.filter((x) => x !== deckId) : [...cur, deckId] };
+    }));
+  };
+  const createDeck = (name) => {
+    const nm = (name || "").trim();
+    if (!nm) return null;
+    const id = "deck_" + uid();
+    setDecks((prev) => [...prev, { id, name: nm }]);
+    return id;
+  };
   const ctlRef = useRef(null);              // 재생 컨트롤러(취소용)
   const wakeLockRef = useRef(null);         // 화면 꺼짐 방지(Wake Lock)
   const cardsRef = useRef(cards);           // 최신 cards 참조(목록 수정 실시간 반영용)
@@ -2481,10 +2520,22 @@ function ListenView({ cards, voiceRef, decks }) {
     return cards.filter((c) => !c.suspended && c.introducedOn);
   };
 
-  // 백그라운드 묶음 단어 고르기: 하루 단위 고정 시드 → 같은 날·범위면 같은 30단어(캐시 적중)
-  const buildBgList = (seed) => {
-    const useSeed = (seed != null) ? seed : Math.floor(Date.now() / 86400000);
-    return seededShuffle(poolForScope(), useSeed).slice(0, BG_COUNT);
+  // 백그라운드 묶음 단어 고르기: 범위(소스+카테고리)가 같으면 직전 목록을 재사용(오디오 재굽기 방지),
+  // 범위를 바꾸거나 forceFresh(새로운 단어 듣기)면 새로 무작위 30개를 뽑는다.
+  const buildBgList = (forceFresh) => {
+    const pool = poolForScope();
+    const scopeKey = cfg.src + "|" + (cfg.cat || "");
+    if (!forceFresh) {
+      const cached = loadBgListCache();
+      if (cached && cached.scopeKey === scopeKey && cached.ids && cached.ids.length) {
+        const byId = new Map(pool.map((c) => [c.id, c]));
+        const reused = cached.ids.map((id) => byId.get(id)).filter(Boolean);
+        if (reused.length > 0) return reused;
+      }
+    }
+    const list = seededShuffle(pool, Date.now() & 0x7fffffff).slice(0, BG_COUNT);
+    saveBgListCache(scopeKey, list.map((c) => c.id));
+    return list;
   };
   // 재생 중인 범위 라벨(백그라운드 표시용)
   const scopeLabel = () => {
@@ -2523,7 +2574,7 @@ function ListenView({ cards, voiceRef, decks }) {
     const a = getSharedAudio();
     if (bgState === "paused") { a.play().catch(() => {}); setBgState("playing"); setMediaPlaybackState("playing"); return; }
     // fresh=true면 매번 새 랜덤 30개(다른 시드), 아니면 하루 고정 시드(캐시 적중)
-    const list = buildBgList(fresh ? (Date.now() & 0x7fffffff) : undefined);
+    const list = buildBgList(!!fresh);
     if (list.length === 0) { setBakeMsg("재생할 단어가 없어요"); setBgState("idle"); return; }
     bgCountRef.current = list.length;
     setBgList(list); // 화면에 30단어 목록 표시
@@ -2994,7 +3045,9 @@ function ListenView({ cards, voiceRef, decks }) {
       {/* 단어 상세 — 흘려듣기 오디오는 모듈 전역(sharedAudio)이라 모달을 열어도 끊기지 않는다.
           단, 모달 안에서 발음 버튼을 직접 누르면 그 소리가 새로 재생되며 흘려듣기는 끊긴다(의도된 동작). */}
       {bgDetailCard && (
-        <DetailModal card={bgDetailCard} allCards={cards} cards={cards}
+        <DetailModal card={bgDetailCard} allCards={cards} cards={cards} decks={decks}
+          onToggleStar={toggleStar} onTogglePriority={togglePriority}
+          onToggleDeck={toggleCardDeck} onCreateDeck={createDeck}
           voiceRef={voiceRef} onClose={() => setBgDetailCard(null)} />
       )}
 
@@ -4880,11 +4933,19 @@ function OnboardingView({ onDone, initial }) {
         {ratio && (
           <div className="onb-ratio">
             <span className="onb-ratio-label">학습 구성</span>
-            {Object.entries(ratio).map(([k, v]) => (
-              <span key={k} className="onb-ratio-item">
-                <CategoryBadge category={k} /> {v}%
-              </span>
-            ))}
+            {(() => {
+              // 같은 퍼센트끼리 뱃지를 묶어 한 줄에("(ピッ)(N3) 15%") — 줄 수를 줄여 한 줄에 들어오게.
+              const groups = new Map(); // v -> [k, ...] (등장 순서 유지)
+              for (const [k, v] of Object.entries(ratio)) {
+                if (!groups.has(v)) groups.set(v, []);
+                groups.get(v).push(k);
+              }
+              return [...groups.entries()].map(([v, ks]) => (
+                <span key={v} className="onb-ratio-item">
+                  {ks.map((k) => <CategoryBadge key={k} category={k} />)} {v}%
+                </span>
+              ));
+            })()}
           </div>
         )}
         {ratio && ratio.piccoma && (
@@ -5122,7 +5183,7 @@ function App() {
 
         <main className="content">
           {tab === "study" && <StudyView cards={cards} setCards={setCards} voiceRef={voiceRef} timeLog={timeLog} session={studySession} setSession={setStudySession} decks={decks} level={onboard.level} />}
-          {tab === "listen" && <ListenView cards={cards} voiceRef={voiceRef} decks={decks} />}
+          {tab === "listen" && <ListenView cards={cards} setCards={setCards} voiceRef={voiceRef} decks={decks} setDecks={setDecks} />}
           {tab === "list" && <ListView cards={cards} setCards={setCards} voiceRef={voiceRef} decks={decks} setDecks={setDecks} />}
           {tab === "quiz" && <QuizView cards={cards} setCards={setCards} setQuizLog={setQuizLog} />}
           {tab === "stats" && <StatsView cards={cards} timeLog={timeLog} quizLog={quizLog} setCards={setCards} setTimeLog={setTimeLog} setQuizLog={setQuizLog} decks={decks} setDecks={setDecks} onboard={onboard} setOnboard={setOnboard} />}
