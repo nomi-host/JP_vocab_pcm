@@ -283,7 +283,7 @@ const DAILY_TOTAL = 30;        // 오늘의 학습 하루 총량(복습+신규) 
 const NEW_RATIO_MIN = 0.3;     // 신규 최소 비율(30%) — 복습이 쌓여도 신규 자리 보장
 
 // 앱 버전/배포일 (정식 배포 시 v1.0으로). 통계탭 하단 워터마크 표시.
-const APP_VERSION = "v0.2.1";
+const APP_VERSION = "v0.2.2";
 const APP_BUILD = "2026-06-30";
 const FEEDBACK_EMAIL = "micki.02@kakaopiccoma.com";
 const FEEDBACK_URL = "https://script.google.com/macros/s/AKfycbyCuoe-Oa7hpb4tKlkeyiG3LFVWaLMTZG9M5wUxChsFzI12kGQEaGLhdLyuuAoLhktc/exec"; // 제보 메일 발송용 GAS 웹앱
@@ -2442,6 +2442,7 @@ function ListenView({ cards, voiceRef, decks }) {
   const [idx, setIdx] = useState(0);        // 현재 카드 인덱스
   const [phase, setPhase] = useState("");   // 현재 단계 표시(일/뜻/예문/예문뜻)
   const [queue, setQueue] = useState([]);   // 재생할 카드 배열
+  const [bgDetailCard, setBgDetailCard] = useState(null); // 흘려듣기 중 살펴보는 단어(상세 모달)
   const ctlRef = useRef(null);              // 재생 컨트롤러(취소용)
   const wakeLockRef = useRef(null);         // 화면 꺼짐 방지(Wake Lock)
   const cardsRef = useRef(cards);           // 최신 cards 참조(목록 수정 실시간 반영용)
@@ -2968,7 +2969,7 @@ function ListenView({ cards, voiceRef, decks }) {
       {(bgState === "playing" || bgState === "paused") && bgList.length > 0 && (
         <div className="bg-list">
           {bgList.map((c, i) => (
-            <div key={c.id} className="bg-list-item">
+            <button key={c.id} className="bg-list-item" onClick={() => setBgDetailCard(c)}>
               <div className="bg-list-head">
                 <span className="bg-list-num">{i + 1}</span>
                 <span className="bg-list-word">{c.word}</span>
@@ -2985,9 +2986,16 @@ function ListenView({ cards, voiceRef, decks }) {
                   {c.ex.ko && <div className="bg-list-ex-ko">{c.ex.ko}</div>}
                 </div>
               )}
-            </div>
+            </button>
           ))}
         </div>
+      )}
+
+      {/* 단어 상세 — 흘려듣기 오디오는 모듈 전역(sharedAudio)이라 모달을 열어도 끊기지 않는다.
+          단, 모달 안에서 발음 버튼을 직접 누르면 그 소리가 새로 재생되며 흘려듣기는 끊긴다(의도된 동작). */}
+      {bgDetailCard && (
+        <DetailModal card={bgDetailCard} allCards={cards} cards={cards}
+          voiceRef={voiceRef} onClose={() => setBgDetailCard(null)} />
       )}
 
       {(bgState === "idle" || bgState === "done") && (
@@ -5804,7 +5812,9 @@ html, body { overscroll-behavior-x: none; overflow-x: hidden; }
 
 /* 백그라운드 재생 중 30단어 목록 */
 .bg-list { display: flex; flex-direction: column; gap: 8px; margin: 12px 0 4px; }
-.bg-list-item { border-radius: 12px; padding: 10px 12px; background: var(--surface); box-shadow: var(--card-shadow); }
+.bg-list-item { display: block; width: 100%; text-align: left; border: none; font: inherit; cursor: pointer;
+  border-radius: 12px; padding: 10px 12px; background: var(--surface); box-shadow: var(--card-shadow); }
+.bg-list-item:active { background: var(--accent-soft); }
 .bg-list-head { display: flex; align-items: baseline; gap: 4px; flex-wrap: wrap; }
 .bg-list-num { font-size: 17px; font-weight: 700; color: var(--ink-2); min-width: 14px; }
 .bg-list-word { font-size: 17px; font-weight: 700; color: var(--ink); }
