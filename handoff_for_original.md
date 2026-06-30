@@ -557,7 +557,113 @@ const list = buildBgList(!!fresh);
 
 ---
 
-## 공통 주의사항 (5개 기능 전체에 해당)
+## 7. 듣기 "화면 보면서 공부하기"에서도 단어 눌러 상세보기
+
+### 발견한 버그
+섹션 5에서 `bgDetailCard`/`setBgDetailCard`와 `DetailModal` 렌더 블록을 추가했는데, 그 렌더 블록을
+**`{cfg.mode === "study" ? (...) : (...)}` 삼항연산자의 bg(배경) 쪽 분기 안에만** 넣어버린 실수가 있었습니다.
+즉 상태(`bgDetailCard`)는 어느 모드에서든 똑같이 set 되지만, 그걸 그려주는 `<DetailModal>`은 **bg 모드일
+때만 화면에 존재** — "화면 보면서 공부하기"(`cfg.mode === "study"`) 모드에서는 단어를 눌러 상태를 바꿔도
+모달이 아예 렌더되지 않아 화면에 아무 일도 안 일어나는 것처럼 보였습니다.
+
+**교훈**: 모달처럼 두 분기(study/bg) 모두에서 공유해야 하는 상태/렌더는, 분기 안에 두지 말고
+**삼항연산자 바깥, 컴포넌트 return의 최상위 레벨**에 둬야 합니다.
+
+### 고친 위치
+`ListenView`의 return 안에서, `{cfg.mode === "study" ? (<>...</>) : (<>...</>)}` 전체가 끝난 직후,
+최상위 컨테이너 `</div>` 바로 앞에 모달을 둡니다:
+```jsx
+{cfg.mode === "study" ? (
+  <> {/* 화면 보면서 공부하기 */} </>
+) : (
+  <> {/* 백그라운드 음성만 */} </>
+)}
+
+{/* 단어 상세 — study/bg 모드 둘 다에서 단어를 누르면 뜬다. */}
+{bgDetailCard && (
+  <DetailModal card={bgDetailCard} allCards={cards} cards={cards} decks={decks}
+    onToggleStar={toggleStar} onTogglePriority={togglePriority}
+    onToggleDeck={toggleCardDeck} onCreateDeck={createDeck}
+    voiceRef={voiceRef} onClose={() => setBgDetailCard(null)} />
+)}
+```
+
+### "화면 보면서 공부하기" 쪽 단어 영역을 클릭 가능하게
+기존엔 `.listen-word`/`.listen-reading`/`.listen-meaning`/`.listen-ex`가 그냥 `<div>`들의 나열이라
+탭해도 아무 반응이 없었습니다. 이 묶음 전체를 버튼 하나로 감쌌습니다:
+```jsx
+<button className="listen-info" onClick={() => setBgDetailCard(cur)}>
+  <div className="listen-word">{cur.word}</div>
+  {cur.hasKanji && cur.reading && <div className="listen-reading">{cur.reading}</div>}
+  <div className="listen-meaning">{cur.meaning}</div>
+  {cur.ex && cur.ex.ja && (
+    <div className="listen-ex">
+      <div className="listen-ex-ja">{cur.ex.ja}</div>
+      {cur.ex.ko && <div className="listen-ex-ko">{cur.ex.ko}</div>}
+    </div>
+  )}
+</button>
+```
+phase-row(점 표시)와 progress-bar는 클릭 영역 밖에 그대로 둡니다(상태 표시일 뿐 탭 대상이 아님).
+
+**CSS**: 원래 `.listen-now`가 `text-align:center; display:flex; flex-direction:column; align-items:center`로
+내용을 가운데 정렬했는데, `<button>`으로 감싸면서 똑같은 정렬을 버튼 자체에도 줘야 기존 모양이 유지됩니다:
+```css
+.listen-info { display: flex; flex-direction: column; align-items: center; width: 100%;
+  border: none; background: none; text-align: center; cursor: pointer; padding: 0; }
+```
+
+---
+
+## 8. 목록 단어 상세(WordDetailModal) 최대 크기 — 탭바 위 20px
+
+### 무엇을 하는 기능인가
+목록 탭에서 단어를 눌러 뜨는 상세 모달(`WordDetailModal`)의 **최대 크기**를, 화면을 거의 꽉 채우던 것에서
+**하단 탭바 위로 20px 정도 여백을 남기는 크기**로 제한했습니다. 내용이 그보다 길면 기존처럼
+`.modal-body` 안에서 스크롤됩니다(내부 상세 UI는 변경 없음).
+
+### 왜 공용 `.modal`/`.modal-overlay`를 직접 수정하지 않았나
+이 두 클래스는 `WordDetailModal`뿐 아니라 `DeckManager`(`className="modal deck-mgr"`)도 같이 씁니다.
+공용 클래스의 `max-height`/`padding`을 바꾸면 DeckManager 크기도 같이 바뀌어 버립니다. 그래서
+**`WordDetailModal`의 두 wrapper에만 모디파이어 클래스를 추가**해서 범위를 좁혔습니다:
+```jsx
+<div className="modal-overlay wd-overlay-pad" onClick={onClose}>
+  <div className="modal wd-modal-cap" onClick={(e) => e.stopPropagation()}>
+```
+다른 앱에서 `.modal`/`.modal-overlay`를 여러 모달이 공유하고 있다면, 똑같이 전용 클래스를 추가해서
+범위를 좁히는 패턴을 권장합니다. 만약 `WordDetailModal`만 그 클래스를 쓰는 구조라면 굳이 모디파이어
+클래스를 만들지 않고 `.modal`/`.modal-overlay`를 직접 고쳐도 됩니다.
+
+### 수치 — 반드시 실측해서 맞출 것
+탭바 높이는 폰트·아이콘 크기에 따라 달라지므로 **감으로 추측하지 말고 실제 CSS로 측정**하세요.
+이 프로젝트의 탭바(아이콘 22px + 텍스트 11px + 패딩들)는 실측 **58px**이었습니다. 여기에 요청받은
+여백 20px을 더해 **78px**을 하단에 예약합니다(상단은 기존 16px 그대로 유지):
+```css
+.wd-overlay-pad { padding: 16px 16px calc(78px + env(safe-area-inset-bottom)) 16px; }
+.wd-modal-cap {
+  max-height: calc(100vh - 94px - env(safe-area-inset-bottom)); /* 94 = 16(top) + 78(bottom) */
+  max-height: calc(100dvh - 94px - env(safe-area-inset-bottom));
+}
+```
+**왜 overlay의 padding과 modal의 max-height를 둘 다 바꿔야 하나**: `.modal-overlay`는
+`display:flex; align-items:center`로 모달을 가운데 정렬합니다. 컨테이너의 padding을 위/아래
+비대칭(16 vs 78)으로 주면, flexbox는 **그 padding을 뺀 나머지 영역 안에서** 가운데 정렬하므로
+— 내용이 짧을 땐 평범하게 중앙 정렬되고, 내용이 충분히 길어서 **최대 크기에 도달했을 때만**
+위 16px·아래 78px이 정확히 지켜집니다(이게 "최대 사이즈일 때 탭바 위 20px"의 의미). 그런데 `.modal`
+자체의 기존 `max-height`(예: `calc(100vh - 32px)`, 대칭 16/16 기준)를 그대로 두면 그 값이 새 padding
+기준보다 더 커서 모달이 새 padding 경계를 넘어 자랄 수 있습니다 — 그래서 `.wd-modal-cap`으로
+정확한 max-height(94px 기준)를 같이 덮어써야 실제로 78px이 보장됩니다.
+
+### 검증 방법 (실측 없이 숫자를 박지 말 것)
+실제 CSS를 그대로 뽑아 정적 HTML로 재구성한 뒤, 내용이 충분히 긴 상태(스크롤이 필요할 정도)로 채워서
+Playwright 등으로 `modal.getBoundingClientRect().bottom`과 `tabbar.getBoundingClientRect().top`의
+차이를 직접 재보세요. 처음에 어림짐작한 "탭바 61px"로 계산했을 땐 실제 간격이 23px(목표 20px과 다름)이
+나왔고, 진짜 CSS로 다시 측정해 탭바가 58px임을 확인한 뒤에야 정확히 20px이 나왔습니다 — 어림값이
+아니라 항상 실측치로 계산하세요.
+
+---
+
+## 공통 주의사항 (전체 기능 해당)
 
 1. **버전 표기**: `index.html` 상단 `APP_VERSION`/`APP_BUILD`를 기능 추가할 때마다 갱신하는 컨벤션을
    이 프로젝트에서 쓰고 있습니다(`APP_BUILD`는 작업 당일 YYYY-MM-DD). 개인 앱에도 같은 컨벤션이 있다면 맞추세요.
@@ -577,7 +683,9 @@ const list = buildBgList(!!fresh);
 | 3. 예문 속 단어 | `b689396`(최초) → `6923b4e`(배경색·현재단어 포함 개선) |
 | 4. TTS 보이스 고정/지연단축 | `b689396` |
 | 5. 흘려듣기 목록 → 상세 (기본 탐색) | `f13ea73` |
-| 6. 흘려듣기 상세 액션(별·학습대기·단어장) + 범위기반 랜덤 | v0.2.3 커밋(이 문서와 같은 커밋) |
+| 6. 흘려듣기 상세 액션(별·학습대기·단어장) + 범위기반 랜덤 | `d2e50ba` (v0.2.3) |
+| 7. 듣기 "화면 보면서 공부하기" 단어 탭 + bg모드 한정 버그 수정 | v0.2.4 커밋(이 문서와 같은 커밋) |
+| 8. 목록 단어 상세 최대 크기(탭바 위 20px) | v0.2.4 커밋(이 문서와 같은 커밋) |
 
 저장소: `nomi-host/JP_vocab_pcm`, 브랜치 `claude/japanese-word-app-index-gc8nud`.
 `git show <커밋>` 으로 정확한 diff를 바로 확인할 수 있습니다.

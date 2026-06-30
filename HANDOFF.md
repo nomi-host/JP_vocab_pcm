@@ -2,7 +2,7 @@
 
 > 마지막 업데이트: 2026-06-30  
 > 작업 브랜치: `claude/japanese-word-app-index-gc8nud`  
-> 현재 버전: `v0.2.3`
+> 현재 버전: `v0.2.4`
 
 ---
 
@@ -71,6 +71,16 @@
 - **첫 사용자 가이드 아이콘 preload**: `<head>`에 `icons-01~05.png` `<link rel="preload">` 추가 — 가이드가 뜨는 시점(로드 후 0.45초)까지 미리 받아둬서 아이콘이 늦게 팝인되는 현상 제거
 - **흘려듣기 상세에 즐겨찾기·학습대기·단어장 액션 추가**: `ListenView`에 `setCards`/`setDecks` 전달, `toggleStar`/`togglePriority`/`toggleCardDeck`/`createDeck`을 로컬 정의해 `bgDetailCard`용 `DetailModal`에 연결
 - **흘려듣기 30단어 선정 기준을 "하루 고정"→"범위(소스+카테고리) 고정"으로 변경**: 이전엔 `Math.floor(Date.now()/86400000)` day-seed라 같은 날엔 어느 프리뷰에서 테스트해도 항상 같은 리스트였음(의도된 캐시 설계였지만 혼란을 줌). 이제 `BG_LIST_KEY`(localStorage)에 `{scopeKey, ids}`를 저장해, **범위가 같으면 직전 목록 재사용**(오디오 재굽기 없이 빠른 재생), **범위를 바꾸면 새로 무작위 30개** 선정. "새로운 단어 듣기" 버튼은 기존처럼 범위 무관 강제 무작위.
+
+#### v0.2.4 — 온보딩 한 줄 강제 + 잔상버그 재대응 + 목록 상세 사이즈 + 듣기 단어탭 + 액션행 정리
+- **온보딩 학습구성 강제 한 줄**: 그룹핑만으론 N2/N1이 여전히 두 줄이라, `.onb-ratio` 전체 패딩·뱃지 크기·gap을 Playwright로 정밀 측정해가며 추가로 축소(뱃지 패딩 4px8px→3px7px, 아이템 gap 5→2.5px, 항목간 gap 8→5px). N1(피ッ+N2+DAILY 묶여 1그룹) 기준 실측 검증 완료.
+- **온보딩 전체 패딩/뱃지 높이 축소**: N1(설명 제일 김) 선택 시에도 학습 시작하기 버튼까지 한 화면에 들어오도록 — 컨테이너 패딩(24/40→16/18), 레벨 버튼 패딩(14→9px), 레벨간 gap(10→6px), 타이틀 폰트(26→23px), 서브타이틀·노트 margin 축소 등. Playwright로 iPhone 12~16(844/812) 완전히 들어옴, iPhone 8 Plus(736) 거의 들어옴(5px), iPhone SE(667)는 51px만 스크롤 필요(기존 218px에서 대폭 개선).
+- **상단 노란 잔상 버그 재대응**: v0.1.10에서 새로고침 깜빡임을 없애려 `location.reload()`를 제거했는데, 그게 막아주던 iOS 잔상 버그가 되살아남. 전체 새로고침 대신 `forceRepaint()`(documentElement를 한 프레임 display:none→복원해 강제 리플로우) 추가, 온보딩 완료 직후 `requestAnimationFrame` 2회 뒤 호출. ⚠️ 실기기(iOS Safari) 미검증 — 재발 시 추가 대응 필요.
+- **목록 단어 상세(WordDetailModal) 최대 크기 제한**: 새 클래스 `wd-overlay-pad`/`wd-modal-cap` 추가(공용 `.modal`/`.modal-overlay`는 DeckManager도 같이 쓰므로 건드리지 않음). 탭바 실측 높이(58px, 실제 CSS로 측정) + 20px 여백 = 78px를 하단에 확보, 내용은 기존처럼 `.modal-body`에서 스크롤. 상세 페이지 내부 UI는 변경 없음.
+- **듣기 "화면 보면서 공부하기"에서도 단어 눌러 상세 가능**: 기존엔 `bgDetailCard`/`DetailModal` 렌더 블록이 `cfg.mode==="study"` 분기 밖(배경모드 분기 안)에 있어 화면모드에선 동작 안 했던 버그를 같이 발견해 수정 — 모달 렌더를 두 분기 바깥(항상 렌더)으로 이동. `.listen-word` 등을 감싸는 `.listen-info` 버튼 추가.
+- **액션 버튼 행 정리**: 즐겨찾기를 텍스트 없이 별 아이콘만(`.wd-act-icon`)으로, 즐겨찾기/학습대기/단어장에 담기를 같은 `.wd-act-btn` 스타일로 통일하고 `.wd-actions`를 `flex-wrap:nowrap`으로 강제 한 줄. "단어장에 담기"는 항상 펼쳐진 칩 목록 대신, 누르면 `showDeckPicker` 상태로 토글되는 패널(새 단어장/기존 단어장 선택)로 변경.
+
+> ⚠️ 이번 회차도 CDN 차단으로 실제 React 렌더는 못 함. 대신 index.html에서 실제 CSS를 그대로 추출해 정적 HTML로 재구성한 뒤 Playwright로 픽셀 단위 측정·스크린샷 검증(온보딩 줄바꿈, 모달-탭바 간격, 액션 버튼 한 줄 배치 등). 단, **forceRepaint()의 실기기 동작은 미검증** — 프리뷰에서 잔상 버그가 또 보이면 알려주세요.
 
 ---
 
