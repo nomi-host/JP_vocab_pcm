@@ -198,7 +198,7 @@ const DAILY_TOTAL = 30;        // 오늘의 학습 하루 총량(복습+신규) 
 const NEW_RATIO_MIN = 0.3;     // 신규 최소 비율(30%) — 복습이 쌓여도 신규 자리 보장
 
 // 앱 버전/배포일 (정식 배포 시 v1.0으로). 통계탭 하단 워터마크 표시.
-const APP_VERSION = "v0.1.7";
+const APP_VERSION = "v0.1.8";
 const APP_BUILD = "2026-06-30";
 const FEEDBACK_EMAIL = "micki.02@kakaopiccoma.com";
 const FEEDBACK_URL = "https://script.google.com/macros/s/AKfycbyCuoe-Oa7hpb4tKlkeyiG3LFVWaLMTZG9M5wUxChsFzI12kGQEaGLhdLyuuAoLhktc/exec"; // 제보 메일 발송용 GAS 웹앱
@@ -4850,7 +4850,7 @@ function FirstRunGuide({ onClose }) {
   return (
     <div className="guide-overlay" onClick={finish}>
       <div className="guide-modal" onClick={(e) => e.stopPropagation()}>
-        <div className="guide-title">처음 오셨네요! 사용법 한눈에</div>
+        <div className="guide-title">처음 오셨네요! 사용법 한눈에 보기</div>
         <div className="guide-list">
           {GUIDE_STEPS.map((s, i) => (
             <div className="guide-item" key={i}>
@@ -4879,8 +4879,17 @@ function App() {
   const [quizLog, setQuizLog] = useState(loadQuizLog);
   const [decks, setDecks] = useState(loadDecks);
   const [onboard, setOnboard] = useState(loadOnboard); // {level, done} | null
-  const [showGuide, setShowGuide] = useState(() => !loadGuideSeen()); // 첫 사용자 가이드
+  const [showGuide, setShowGuide] = useState(false); // 첫 사용자 가이드
   const voiceRef = useJaVoice();
+
+  // 가이드는 마운트 직후 잠깐 뒤에 띄운다. 온보딩 완료 직후엔 잔상 제거용 전체 새로고침이
+  // 80ms 후 실행되는데, 가이드를 즉시 띄우면 '떴다가 새로고침'되는 글리치가 보이므로
+  // 새로고침 이후(재마운트) 시점에 한 번만 깔끔하게 노출되도록 지연시킨다.
+  useEffect(() => {
+    if (loadGuideSeen()) return;
+    const t = setTimeout(() => setShowGuide(true), 450);
+    return () => clearTimeout(t);
+  }, []);
 
   useEffect(() => { saveDecks(decks); }, [decks]);
 
@@ -4964,7 +4973,7 @@ function App() {
         </div>
       </header>
 
-      <InstallBanner />
+      {!showGuide && <InstallBanner />}
 
       <div
         className="scroll-area"
@@ -5899,7 +5908,7 @@ html, body { overscroll-behavior-x: none; overflow-x: hidden; }
 .install-banner { flex-shrink: 0; background: var(--accent-soft); border-bottom: 1px solid var(--accent-30);
   padding: 10px 14px calc(10px + env(safe-area-inset-bottom, 0px) * 0); }
 .install-row { display: flex; align-items: center; gap: 11px; }
-.install-svg { width: 38px; height: 38px; flex-shrink: 0; object-fit: contain; }
+.install-svg { width: 46px; height: 46px; flex-shrink: 0; object-fit: contain; }
 .install-text { display: flex; flex-direction: column; gap: 1px; flex: 1; min-width: 0; }
 .install-text b { font-size: 13.5px; color: var(--ink); }
 .install-text span { font-size: 11.5px; color: var(--ink-2); line-height: 1.35; word-break: keep-all; }
@@ -5921,10 +5930,10 @@ html, body { overscroll-behavior-x: none; overflow-x: hidden; }
 .guide-title { font-size: 18px; font-weight: 800; color: var(--ink); margin: 22px 0 18px; }
 .guide-list { display: flex; flex-direction: column; gap: 16px; text-align: left; margin-bottom: 22px; }
 .guide-item { display: flex; align-items: center; gap: 13px; }
-.guide-icon { flex-shrink: 0; width: 40px; height: 40px; border-radius: 11px;
+.guide-icon { flex-shrink: 0; width: 60px; height: 60px; border-radius: 16px;
   background: var(--accent-soft);
   display: flex; align-items: center; justify-content: center; }
-.guide-icon img { width: 26px; height: 26px; object-fit: contain; display: block; }
+.guide-icon img { width: 39px; height: 39px; object-fit: contain; display: block; }
 .guide-item-text { display: flex; flex-direction: column; gap: 2px; }
 .guide-item-text b { font-size: 14px; color: var(--ink); }
 .guide-item-text span { font-size: 12.5px; color: var(--ink-2); line-height: 1.45; word-break: keep-all; }
