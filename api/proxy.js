@@ -93,14 +93,15 @@ async function callFeedback(body) {
 }
 
 // ── Google TTS (Chirp 3: HD) ─────────────────────────────────
-const LANG = { ja: { code: "ja-JP", f: "Aoede", m: "Alnilam" }, ko: { code: "ko-KR", f: "Aoede", m: "Alnilam" } };
-const VPOOL = ["Aoede","Kore","Leda","Zephyr","Puck","Charon","Fenrir","Orus","Alnilam"];
+// 일본어가 가장 자연스러운 남/녀 보이스 1개씩으로 고정. random도 이 둘 중에서만 선택.
+// (Chirp3-HD 8개 기본 화자 중 가장 자연스럽다고 평가되는 Aoede(여)·Charon(남). 바꾸려면 f/m만 수정)
+const LANG = { ja: { code: "ja-JP", f: "Aoede", m: "Charon" }, ko: { code: "ko-KR", f: "Aoede", m: "Charon" } };
 function pickVoice(lang, gender, name) {
   const L = LANG[lang] || LANG.ja, prefix = L.code + "-Chirp3-HD-";
   if (name && /^[A-Za-z]+$/.test(name)) return prefix + name;
-  if (gender === "female") return prefix + L.f;
   if (gender === "male") return prefix + L.m;
-  return prefix + VPOOL[Math.floor(Math.random() * VPOOL.length)];
+  if (gender === "female") return prefix + L.f;
+  return prefix + (Math.random() < 0.5 ? L.f : L.m); // random: 지정된 남/녀 중에서만
 }
 async function callTts(body) {
   const key = process.env.GOOGLE_TTS_KEY;

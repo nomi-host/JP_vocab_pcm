@@ -166,6 +166,92 @@ function wordsWithKanji(ch, n, pool) {
 /* SEED에 실제 카드로 존재하는 단어 집합(관련 단어 탭 이동 가능 여부 판정용) */
 const SEED_WORDS = new Set(SEED.map((c) => c.word));
 
+/* ===================== 예문 속 단어 추출 =====================
+   예문(card.ex.tokens)에 등장하는 단어 중 words.js(SEED)에 있는 것을 순서대로 골라낸다.
+   설계 원칙:
+   - 표면(한자)+요미가나 동시 검증 → 工作/耕作처럼 요미가나만 같은 오매칭 방지,
+     같은 한자를 음/훈 다르게 읽는 경우(方=ほう/かた)도 요미가나로 구분.
+   - 한자 골격(가나 제거) 정규화로 受付 ↔ 受け付け 같은 오쿠리가나 변형 호환.
+   - 동사/형용사는 어간 접두 일치로 활용형(固めましょう→固める, 盗んだ→盗む) 인식.
+   - 접미사(～)·짧은 조사·기능어 제외. */
+function isKanaChar(ch) { const o = ch.codePointAt(0); return (o >= 0x3040 && o <= 0x30FF) || ch === "ー"; }
+function kanjiSkeleton(s) { let o = ""; for (const ch of (s || "")) if (!isKanaChar(ch)) o += ch; return o; }
+function hasAnyKanji(s) { for (const ch of (s || "")) if (isKanjiChar(ch)) return true; return false; }
+const KANA_STOPWORDS = new Set([
+  "する","ある","いる","なる","れる","られる","せる","させる","くる","くれる","いく","しまう",
+  "こと","もの","ため","よう","そう","とき","ところ","これ","それ","あれ","どれ","ない","いう",
+  "ここ","そこ","あそこ","この","その","あの","どの","から","まで","ので","のに","では","には",
+  "です","ます","でも","だけ","ほど","くらい","ぐらい","など","また","もう","とても","ちょっと",
+  "わたし","あなた","かれ","かのじょ","みんな","じぶん","とき","つもり",
+]);
+let _seedIdxBuilt = false;
+const _seedExact = new Map();        // "표면|요미" -> entry
+const _seedSkel = new Map();         // "한자골격|요미" -> entry (변형 호환)
+const _seedVerbsByHead = new Map();  // 표면 첫 글자 -> [{sStem,rStem,entry}] (활용 매칭)
+function buildSeedIdx() {
+  if (_seedIdxBuilt) return; _seedIdxBuilt = true;
+  for (const w of SEED) {
+    if (!w || !w.word) continue;
+    const surf = w.word, read = w.reading || w.word;
+    if (/[～〜~]/.test(surf)) continue;        // 접두/접미사 제외
+    const ek = surf + "|" + read; if (!_seedExact.has(ek)) _seedExact.set(ek, w);
+    const skel = kanjiSkeleton(surf);
+    if (skel && skel !== surf) { const sk = skel + "|" + read; if (!_seedSkel.has(sk)) _seedSkel.set(sk, w); }
+    // 동사/형용사 활용 매칭용: 한자 포함 + 표면이 가나(오쿠리가나)로 끝나고 요미가나 어간 길이 ≥2
+    const last = surf[surf.length - 1];
+    if (hasAnyKanji(surf) && isKanaChar(last) && read.length >= 3) {
+      const sStem = surf.slice(0, -1), rStem = read.slice(0, -1);
+      if (rStem.length >= 2 && hasAnyKanji(sStem)) {
+        const head = sStem[0];
+        if (!_seedVerbsByHead.has(head)) _seedVerbsByHead.set(head, []);
+        _seedVerbsByHead.get(head).push({ sStem, rStem, entry: w });
+      }
+    }
+  }
+}
+function extractExampleWords(card) {
+  buildSeedIdx();
+  const ex = getExample(card);
+  const toks = (ex && ex.tokens) || [];
+  if (!toks.length) return [];
+  const selfW = card.word, selfR = card.reading || "";
+  const sSurf = (a, b) => toks.slice(a, b).map((t) => t.t).join("");
+  const sRead = (a, b) => toks.slice(a, b).map((t) => (t.r != null ? t.r : t.t)).join("");
+  const out = [], seen = new Set();
+  const push = (e) => {
+    if (!e || (e.word === selfW && (e.reading || "") === selfR) || seen.has(e.word)) return;
+    seen.add(e.word); out.push(e);
+  };
+  let i = 0;
+  while (i < toks.length) {
+    let adv = 0;
+    // 1) 정확/변형 매칭 (1~3 토큰, 긴 것 우선)
+    for (let span = Math.min(3, toks.length - i); span >= 1 && !adv; span--) {
+      const surf = sSurf(i, i + span); if (!surf) continue;
+      const read = sRead(i, i + span);
+      if (!hasAnyKanji(surf) && (surf.length < 3 || KANA_STOPWORDS.has(surf))) continue;
+      const e = _seedExact.get(surf + "|" + read) || _seedSkel.get(kanjiSkeleton(surf) + "|" + read);
+      if (e) { push(e); adv = span; }
+    }
+    if (adv) { i += adv; continue; }
+    // 2) 동사/형용사 활용 매칭 (1~2 토큰, 어간 접두 일치)
+    for (let span = Math.min(2, toks.length - i); span >= 1 && !adv; span--) {
+      const surf = sSurf(i, i + span); if (!hasAnyKanji(surf)) continue;
+      const read = sRead(i, i + span);
+      const cands = _seedVerbsByHead.get(surf[0]) || [];
+      for (const v of cands) {
+        if (surf.startsWith(v.sStem) && read.startsWith(v.rStem) && read.length >= v.rStem.length) {
+          const tail = surf.slice(v.sStem.length);
+          if (tail.length === 0 || isKanaChar(tail[0])) { push(v.entry); adv = span; break; }
+        }
+      }
+    }
+    if (adv) { i += adv; continue; }
+    i += 1;
+  }
+  return out;
+}
+
 /* ===================== 유틸 ===================== */
 const DAY = 86400000;
 /* '오늘' 기준: 한국시간(KST, UTC+9) 기준으로 날짜를 계산하되,
@@ -198,7 +284,7 @@ const DAILY_TOTAL = 30;        // 오늘의 학습 하루 총량(복습+신규) 
 const NEW_RATIO_MIN = 0.3;     // 신규 최소 비율(30%) — 복습이 쌓여도 신규 자리 보장
 
 // 앱 버전/배포일 (정식 배포 시 v1.0으로). 통계탭 하단 워터마크 표시.
-const APP_VERSION = "v0.1.10";
+const APP_VERSION = "v0.2.0";
 const APP_BUILD = "2026-06-30";
 const FEEDBACK_EMAIL = "micki.02@kakaopiccoma.com";
 const FEEDBACK_URL = "https://script.google.com/macros/s/AKfycbyCuoe-Oa7hpb4tKlkeyiG3LFVWaLMTZG9M5wUxChsFzI12kGQEaGLhdLyuuAoLhktc/exec"; // 제보 메일 발송용 GAS 웹앱
@@ -259,6 +345,7 @@ function setTtsSettings(next) { ttsSettings = next; saveTtsSettings(next); }
 
 // 같은 텍스트+설정 조합은 캐시해서 재호출/지연을 줄임
 const ttsCache = new Map(); // key -> objectURL
+const ttsInflight = new Map(); // key -> Promise (미리불러오기와 탭이 겹칠 때 중복 호출 방지)
 let currentAudio = null;
 
 function cacheKey(text, s, lang) {
@@ -275,31 +362,36 @@ function effSettings(kind) {
 async function fetchGoogleAudio(text, s, lang) {
   const key = cacheKey(text, s, lang);
   if (ttsCache.has(key)) return ttsCache.get(key);
-  // 영구 캐시(IndexedDB): 같은 음성은 기기당 평생 1회만 API 호출 → 구글 API 부하 최소화
-  try {
-    const cached = await idbGet("clip|" + key);
-    if (cached) { const u = URL.createObjectURL(cached); ttsCache.set(key, u); return u; }
-  } catch (_) {}
-  const data = await apiPost({ type: "tts", text, gender: s.gender, rate: s.rate, lang: lang || "ja" });
-  if (!data || !data.audio) throw new Error("no audio");
-  const bin = atob(data.audio);
-  const bytes = new Uint8Array(bin.length);
-  for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
-  const blob = new Blob([bytes], { type: "audio/mpeg" });
-  try { idbSet("clip|" + key, blob); } catch (_) {} // 영구 저장(다음엔 호출 없이 재생)
-  const url = URL.createObjectURL(blob);
-  ttsCache.set(key, url);
-  return url;
+  if (ttsInflight.has(key)) return ttsInflight.get(key); // 진행 중 요청이 있으면 재사용(탭+미리불러오기 중복 방지)
+  const p = (async () => {
+    // 영구 캐시(IndexedDB): 같은 음성은 기기당 평생 1회만 API 호출 → 구글 API 부하 최소화
+    try {
+      const cached = await idbGet("clip|" + key);
+      if (cached) { const u = URL.createObjectURL(cached); ttsCache.set(key, u); return u; }
+    } catch (_) {}
+    const data = await apiPost({ type: "tts", text, gender: s.gender, rate: s.rate, lang: lang || "ja" });
+    if (!data || !data.audio) throw new Error("no audio");
+    const bin = atob(data.audio);
+    const bytes = new Uint8Array(bin.length);
+    for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+    const blob = new Blob([bytes], { type: "audio/mpeg" });
+    try { idbSet("clip|" + key, blob); } catch (_) {} // 영구 저장(다음엔 호출 없이 재생)
+    const url = URL.createObjectURL(blob);
+    ttsCache.set(key, url);
+    return url;
+  })();
+  ttsInflight.set(key, p);
+  try { return await p; } finally { ttsInflight.delete(key); }
 }
 
-/* 미리 불러오기: 재생하지 않고 캐시에만 채워 다음 카드 음성을 즉시 들리게 함 */
+/* 미리 불러오기: 재생하지 않고 캐시에만 채워 음성을 즉시 들리게 함.
+   random도 이제 지정된 남/녀 2개 중에서만 나오므로 미리불러오기 캐시가 그대로 적중한다. */
 function prefetchAudio(text, kind) {
   if (!text) return;
   if (ttsSettings.engine !== "google") return;
   const s = effSettings(kind);
-  if (s.gender === "random") return; // 랜덤은 매번 목소리가 달라 캐시 효과 없음
   const key = cacheKey(text, s);
-  if (ttsCache.has(key)) return;
+  if (ttsCache.has(key) || ttsInflight.has(key)) return;
   fetchGoogleAudio(text, s).catch(() => {});
 }
 
@@ -1266,6 +1358,7 @@ function DetailModal({ card, onClose, voiceRef, allCards, cards, decks, onToggle
   const reading = cur.reading;
   const chars = useMemo(() => kanjiInWord(word), [word]);
   const ex = useMemo(() => getExample(cur), [cur.id, word]);
+  const exWords = useMemo(() => (ex && ex.ja) ? extractExampleWords(cur) : [], [cur.id]);
   const posLabel = POS_LABEL[posClass(cur)] || "기타";
 
   const canBack = stack.length > 1;
@@ -1403,6 +1496,32 @@ function DetailModal({ card, onClose, voiceRef, allCards, cards, decks, onToggle
                 {ex.ko && <div className="wd-ex-ko">{ex.ko}</div>}
               </div>
             )}
+
+            {/* 예문 속 단어(words.js에 있는 것만) — 눌러서 그 단어 상세로 이동 */}
+            {(() => {
+              const ews = exWords;
+              if (!ews.length) return null;
+              const pool = cards || allCards || [];
+              return (
+                <div className="wd-exwords">
+                  <div className="kanji-section-label">예문 속 단어</div>
+                  {ews.map((e, i) => {
+                    const live = pool.find((c) => c.word === e.word && (c.reading || "") === (e.reading || "")) || e;
+                    return (
+                      <button key={i} className="exw-row" onClick={() => openWord(live)}>
+                        <CategoryBadge category={cardCategory(e)} />
+                        <span className="exw-main">
+                          <span className="exw-word">{e.word}</span>
+                          {e.reading && e.reading !== e.word && <span className="exw-read">{e.reading}</span>}
+                        </span>
+                        <span className="exw-mean">{e.meaning}</span>
+                        <span className="exw-arrow"><Icon.ChevR /></span>
+                      </button>
+                    );
+                  })}
+                </div>
+              );
+            })()}
           </div>
         ) : (
           /* ===== 2단계: 한자 상세 ===== */
@@ -1642,15 +1761,16 @@ function StudyView({ cards, setCards, voiceRef, timeLog, session, setSession, de
   const currentId = s.queue[s.pos];
   const current = cards.find((c) => c.id === currentId) || null;
 
-  // 다음 카드 음성 미리 불러오기(현재 카드를 보는 동안 백그라운드로)
+  // 음성 미리 불러오기: 현재 카드(첫 탭 즉시 재생용) + 다음 카드(미리)를 백그라운드로 캐시.
   useEffect(() => {
-    const nextId = s.queue[s.pos + 1];
-    if (!nextId) return;
-    const next = cardsRef.current.find((c) => c.id === nextId);
-    if (!next) return;
-    prefetchAudio(wordSpeech(next), "word");
-    const ex = getExample(next);
-    if (ex && ex.tokens && ex.tokens.length) prefetchAudio(exampleSpeech(ex), "example");
+    const warm = (c) => {
+      if (!c) return;
+      prefetchAudio(wordSpeech(c), "word");
+      const ex = getExample(c);
+      if (ex && ex.tokens && ex.tokens.length) prefetchAudio(exampleSpeech(ex), "example");
+    };
+    warm(cardsRef.current.find((c) => c.id === currentId));
+    warm(cardsRef.current.find((c) => c.id === s.queue[s.pos + 1]));
   }, [currentId, s.pos]);
 
   useEffect(() => {
@@ -5834,6 +5954,19 @@ html, body { overscroll-behavior-x: none; overflow-x: hidden; }
 .wd-ex-ja { display: block; width: 100%; text-align: left; border: none; background: none; cursor: pointer;
   font-size: 20px; color: var(--ink); line-height: 1.65; overflow-wrap: anywhere; word-break: normal; padding: 0; }
 .wd-ex-ko { font-size: 15px; color: var(--ink-2); margin-top: 10px; line-height: 1.6; word-break: keep-all; }
+
+/* 예문 속 단어 목록 */
+.wd-exwords { margin-top: 22px; padding-top: 20px; border-top: 1px solid var(--line); }
+.exw-row { display: flex; align-items: center; gap: 9px; width: 100%; text-align: left;
+  border: none; background: var(--fill); border-radius: 12px; padding: 11px 12px; cursor: pointer; margin-top: 8px; }
+.exw-row:active { background: var(--accent-soft); }
+.exw-main { display: flex; align-items: baseline; gap: 7px; flex-shrink: 0; min-width: 0; }
+.exw-word { font-size: 17px; font-weight: 700; color: var(--ink);
+  font-family: -apple-system, BlinkMacSystemFont, "Hiragino Kaku Gothic ProN", "Noto Sans JP", sans-serif; }
+.exw-read { font-size: 12px; color: var(--muted); white-space: nowrap; }
+.exw-mean { flex: 1; min-width: 0; font-size: 13px; color: var(--ink-2);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap; text-align: right; }
+.exw-arrow { flex-shrink: 0; color: var(--muted); display: flex; }
 
 /* ===== 카테고리 뱃지 (N1~N5 / ピッコマ) ===== */
 .badge-cat { font-size: 11px; font-weight: 800; line-height: 1; letter-spacing: .3px;
