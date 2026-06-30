@@ -4430,13 +4430,14 @@ function usePullToRefresh(onRefresh) {
     if (dy > 0) setPull(Math.min(dy * 0.5, 100));
   };
   const onTouchEnd = async () => {
-    if (pull >= THRESH) {
+    const triggered = pull >= THRESH;
+    setPull(0);            // 당김 오프셋을 먼저 0으로(레이아웃 원위치) → 새로고침 시 하단바 튐 방지
+    startY.current = null;
+    if (triggered) {
       setRefreshing(true);
       await onRefresh();
       setTimeout(() => setRefreshing(false), 500);
     }
-    setPull(0);
-    startY.current = null;
   };
   return { pull, refreshing, onTouchStart, onTouchMove, onTouchEnd };
 }
@@ -4743,8 +4744,10 @@ function App() {
   }, [cards]);
 
   const refresh = useCallback(async () => {
-    // 당겨서 새로고침 = 페이지 전체 강제 새로고침(소프트 re-render 아님). 최신 배포 반영.
-    try { window.location.reload(); } catch (_) { setVersion((v) => v + 1); }
+    // 소프트 새로고침(re-render). 전체 reload는 고정 레이아웃이 다시 그려지며 하단바가 튀어 제거함.
+    // (최신 배포 코드 반영이 필요하면 앱을 다시 열면 됨)
+    await new Promise((r) => setTimeout(r, 350));
+    setVersion((v) => v + 1);
   }, []);
 
   const ptr = usePullToRefresh(refresh);
