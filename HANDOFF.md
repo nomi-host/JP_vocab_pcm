@@ -2,7 +2,7 @@
 
 > 마지막 업데이트: 2026-06-30  
 > 작업 브랜치: `claude/japanese-word-app-index-gc8nud`  
-> 현재 버전: `v0.1.5`
+> 현재 버전: `v0.1.6`
 
 ---
 
@@ -38,6 +38,11 @@
 - **단어 자동검색 실패 문구 변경**: 기술적 에러 노출 → "딱 맞는 표현을 찾기 어려워요. 아래 칸에 직접 입력해 등록할 수 있어요."
 - **홈 화면 설치 유도 + PWA manifest**: `manifest.json` 추가, `img/icon-192.png`·`icon-512.png` 생성, 미설치 사용자에게 `InstallBanner` 노출 (iOS localStorage 7일 삭제 대비 — 설치 시 진도 보존). 안드로이드는 `beforeinstallprompt` 원탭 설치, iOS는 수동 안내.
 - **첫 사용자 가이드**: `FirstRunGuide` — 최초 1회 사용법 5가지 안내 (localStorage `jp-vocab-guide-v1`).
+
+#### v0.1.6 — 가이드/배너 비주얼 다듬기
+- 첫 사용자 가이드: 상단 츠군 이미지 제거, 좌측 이모지 → 앱 아이콘(노란 톤 타일)으로 교체
+  (학습=Cards, 발음=Speaker(기존), 듣기=Headphone, 퀴즈=Quiz 재사용 / `Icon.Tap` 손가락 아이콘 신규 추가)
+- 설치 배너: 좌측 이모지 → `img/home-screen.svg`(첨부 일러스트)로 교체
 
 > ⚠️ 샌드박스 네트워크 제약(unpkg CDN 차단)으로 이 환경에서 브라우저 렌더 검증은 못 함. JSX 컴파일·manifest 유효성은 확인됨. 프리뷰에서 InstallBanner/FirstRunGuide 시각 확인 권장.
 
