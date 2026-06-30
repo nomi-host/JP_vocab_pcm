@@ -2,7 +2,7 @@
 
 > 마지막 업데이트: 2026-06-30  
 > 작업 브랜치: `claude/japanese-word-app-index-gc8nud`  
-> 현재 버전: `v0.2.5`
+> 현재 버전: `v0.2.6`
 
 ---
 
@@ -89,6 +89,13 @@
 - **액션 버튼 패딩 60%로 축소**: `.wd-act-btn` 9px 14px → 5px 8px, `.wd-act-icon` 9px 12px → 5px 7px.
 
 > ⚠️ 잔상버그·설치배너버그 둘 다 iOS Safari 전용이라 이 환경에서 실기기 검증이 원천적으로 불가능합니다. 코드 추론 기반 최선의 대응이며, 프리뷰에서 실제 확인이 꼭 필요합니다.
+
+#### v0.2.6 — 온보딩 행간 80%, 예문 요미가나 통일, 잔상버그 3차 대응
+- **온보딩 줄글 행간 80%로**: `.onb-title`(1.3→1.04), `.onb-sub`(1.5→1.2), `.onb-level-desc`(1.5→1.2), `.onb-note`(1.6→1.28) — 타이틀과 설명류 텍스트 전부.
+- **예문 요미가나 통일**: `DetailModal`의 `wd-ex-ja`(목록 단어 상세)와 `ListenView` 화면모드의 `listen-ex-ja`가 토큰 없이 평문(`{ex.ja}`)만 보여주던 걸, 다른 곳(FlashCard·흘려듣기 bg-list 등)과 같은 `FuriganaText`/`furi-paren` 방식(작은 글씨 괄호, 例: 面接用（よう）に〜)으로 통일. `ex.tokens` 있으면 `FuriganaText`, 없으면 기존처럼 평문 폴백.
+- **노란 잔상 버그 3차 대응**: v0.2.5(`body`+`theme-color` 동기화)로도 안 잡힘이 확인됨. 재진단 — "헤더"가 iOS 시스템 상태바가 아니라 **제거된 `position:fixed` 온보딩 오버레이의 합성 레이어 잔상 자체**일 가능성에 무게를 두고, `forceRepaint()`를 대폭 강화: ① 스크롤 1px 넛지(iOS의 fixed-레이어 재합성을 유도하는, 이 버그 유형에 가장 흔히 쓰이는 방법) ② `documentElement.opacity` 미세 토글(새 합성 레이어 강제 생성) ③ 기존 `display` 토글(리플로우) 3가지를 함께 수행하도록 변경. 또한 `<html>` 배경도 `<body>`와 같이 동기화하도록 추가. 온보딩 종료 시점의 repaint 트리거를 `OnboardingView`의 `onDone`이 아니라 App의 동기화 `useEffect` 한 곳으로 일원화(`wasOnboardRef`로 "방금 끝남" 전이만 감지).
+
+> ⚠️ 이번에도 iOS 실기기 검증 불가. 만약 v0.2.6에서도 안 잡히면, 다음 단계로 의심해볼 것: (a) `apple-mobile-web-app-status-bar-style`을 `default`에서 `black-translucent`로 바꿔보기(상태바 렌더링 방식 자체가 다름), (b) 온보딩 오버레이를 `position:fixed` 대신 그냥 일반 흐름(in-flow) 전체화면 div로 바꿔보기(애초에 별도 합성 레이어를 안 만들면 잔상 자체가 생길 수 없음 — 가장 근본적이지만 레이아웃 영향 검토 필요), (c) 최후 수단으로 `location.reload()`를 되살리되 reload 직전 0.1초 안 보이게 페이드 처리.
 
 ---
 

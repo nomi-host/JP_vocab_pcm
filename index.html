@@ -290,7 +290,7 @@ const DAILY_TOTAL = 30;        // 오늘의 학습 하루 총량(복습+신규) 
 const NEW_RATIO_MIN = 0.3;     // 신규 최소 비율(30%) — 복습이 쌓여도 신규 자리 보장
 
 // 앱 버전/배포일 (정식 배포 시 v1.0으로). 통계탭 하단 워터마크 표시.
-const APP_VERSION = "v0.2.5";
+const APP_VERSION = "v0.2.6";
 const APP_BUILD = "2026-06-30";
 const FEEDBACK_EMAIL = "micki.02@kakaopiccoma.com";
 const FEEDBACK_URL = "https://script.google.com/macros/s/AKfycbyCuoe-Oa7hpb4tKlkeyiG3LFVWaLMTZG9M5wUxChsFzI12kGQEaGLhdLyuuAoLhktc/exec"; // 제보 메일 발송용 GAS 웹앱
@@ -1513,7 +1513,11 @@ function DetailModal({ card, onClose, voiceRef, allCards, cards, decks, onToggle
                 <div className="kanji-section-label">예문</div>
                 <button className="wd-ex-ja"
                   onClick={() => speakSmart(exampleSpeech(ex), voiceRef, null, "example")}
-                  title="예문 발음 듣기">{ex.ja}</button>
+                  title="예문 발음 듣기">
+                  {ex.tokens && ex.tokens.length > 0
+                    ? <FuriganaText tokens={ex.tokens} showFuri={true} />
+                    : ex.ja}
+                </button>
                 {ex.ko && <div className="wd-ex-ko">{ex.ko}</div>}
               </div>
             )}
@@ -2921,7 +2925,11 @@ function ListenView({ cards, setCards, voiceRef, decks, setDecks }) {
               <div className="listen-meaning">{cur.meaning}</div>
               {cur.ex && cur.ex.ja && (
                 <div className="listen-ex">
-                  <div className="listen-ex-ja">{cur.ex.ja}</div>
+                  <div className="listen-ex-ja">
+                    {cur.ex.tokens && cur.ex.tokens.length > 0
+                      ? <FuriganaText tokens={cur.ex.tokens} showFuri={true} />
+                      : cur.ex.ja}
+                  </div>
                   {cur.ex.ko && <div className="listen-ex-ko">{cur.ex.ko}</div>}
                 </div>
               )}
@@ -4992,16 +5000,25 @@ function isIOSDevice() {
   try { return /iphone|ipad|ipod/i.test(navigator.userAgent || ""); } catch (e) { return false; }
 }
 /* iOS Safari는 position:fixed 전체화면 오버레이(온보딩의 노란 배경)가 사라진 뒤에도
-   상단(상태바·노치 영역) 합성 레이어에 옛 색이 잔상으로 남는 경우가 있다.
-   전체 새로고침(location.reload) 없이, documentElement를 한 프레임 동안 display:none
-   처리해 강제로 리플로우·리페인트시켜 잔상을 지운다. */
+   그 자리(특히 상단 노치/상태바 인접 영역)의 합성(compositing) 레이어가 옛 색으로 남는
+   경우가 있다. 전체 새로고침(location.reload) 없이 아래 3가지를 함께 수행해 잔상을 지운다:
+   1) 스크롤 1px 넛지 — iOS Safari가 fixed 레이어의 합성을 다시 계산하게 만드는,
+      이 종류 버그에 가장 효과적이라고 알려진 방법.
+   2) opacity 미세 토글 — 새 합성 레이어를 강제로 다시 만들게 함.
+   3) documentElement display 토글 — 레이아웃 자체도 강제로 리플로우. */
 function forceRepaint() {
   try {
+    const x = window.scrollX, y = window.scrollY;
+    window.scrollTo(x, y + 1);
+    window.scrollTo(x, y);
     const el = document.documentElement;
-    const prev = el.style.display;
+    const prevOpacity = el.style.opacity;
+    el.style.opacity = "0.99999";
+    requestAnimationFrame(() => { el.style.opacity = prevOpacity; });
+    const prevDisplay = el.style.display;
     el.style.display = "none";
     void el.offsetHeight; // 강제 리플로우
-    el.style.display = prev;
+    el.style.display = prevDisplay;
   } catch (e) {}
 }
 function InstallBanner() {
@@ -5108,17 +5125,24 @@ function App() {
     return () => clearTimeout(t);
   }, []);
 
-  // iOS 상태바(상단 노치 영역) 잔상 방지: 온보딩 화면은 전체를 덮는 노란(.onb) 오버레이로
-  // 그려지는데, 실제 <body> 배경은 계속 흰색 계열(#f2f2f7)로 남아있으면 iOS가 상태바 색을
-  // 정할 때 두 색이 충돌해 온보딩이 끝난 뒤에도 상단에 노란 잔상이 남는 경우가 있다.
-  // body 배경과 theme-color meta를 온보딩 상태에 맞춰 실제로 바꿔줘서 충돌 자체를 없앤다.
+  // iOS 잔상 방지: 온보딩(.onb)은 position:fixed 노란 오버레이로 전체화면을 덮는데,
+  // <html>/<body> 자체 배경과 theme-color는 계속 흰색 계열로 남아있다. 이 불일치가
+  // 온보딩이 끝난 뒤 상단(상태바·노치 인접 영역)에 노란 잔상이 남는 원인으로 보여,
+  // html/body 배경과 theme-color를 온보딩 상태에 맞춰 실제로 동기화한다.
+  // 그리고 '방금 온보딩이 끝난 시점'에는 forceRepaint()로 한 번 더 잔상을 닦아낸다.
+  const wasOnboardRef = useRef(!onboard || !onboard.done);
   useEffect(() => {
     const showingOnboard = !onboard || !onboard.done;
     try {
+      document.documentElement.style.background = showingOnboard ? "#ffce10" : "";
       document.body.style.background = showingOnboard ? "#ffce10" : "";
       const m = document.querySelector('meta[name="theme-color"]');
       if (m) m.setAttribute("content", showingOnboard ? "#ffce10" : "#f2f2f7");
     } catch (e) {}
+    if (wasOnboardRef.current && !showingOnboard) {
+      requestAnimationFrame(() => requestAnimationFrame(forceRepaint));
+    }
+    wasOnboardRef.current = showingOnboard;
   }, [onboard && onboard.done]);
 
   useEffect(() => { saveDecks(decks); }, [decks]);
@@ -5185,9 +5209,8 @@ function App() {
         <style>{CSS}</style>
         <OnboardingView onDone={(lv) => {
           // 전체 새로고침 없이 React 상태 전환으로 바로 학습화면 진입(새로고침 깜빡임 제거).
+          // 잔상 제거(html/body 배경 동기화 + forceRepaint)는 위쪽 useEffect에서 일괄 처리.
           const o = { level: lv, done: true }; saveOnboard(o); setOnboard(o);
-          // iOS 잔상(상단 노란 배경) 방지: 새 화면이 그려진 다음 프레임에 강제 리페인트만 수행.
-          requestAnimationFrame(() => requestAnimationFrame(forceRepaint));
         }} />
       </div>
     );
@@ -6114,9 +6137,9 @@ html, body { overscroll-behavior-x: none; overflow-x: hidden; }
 .onb-brand-text { font-size: 14px; font-weight: 800; letter-spacing: .2px; color: rgba(0,0,0,.55); }
 .onb-head { display: flex; align-items: center; justify-content: space-between; gap: 14px; margin-bottom: 8px; }
 .onb-head-icon { height: 64px; width: auto; display: block; flex-shrink: 0; }
-.onb-title { font-size: 23px; font-weight: 800; color: var(--ink); line-height: 1.3;
+.onb-title { font-size: 23px; font-weight: 800; color: var(--ink); line-height: 1.04;
   letter-spacing: -0.4px; margin: 0; word-break: keep-all; }
-.onb-sub { font-size: 14px; color: rgba(0,0,0,.62); line-height: 1.5; margin: 0 0 9px; word-break: keep-all; }
+.onb-sub { font-size: 14px; color: rgba(0,0,0,.62); line-height: 1.2; margin: 0 0 9px; word-break: keep-all; }
 .onb-levels { display: flex; flex-direction: column; gap: 6px; }
 .onb-level { display: flex; align-items: center; gap: 12px; width: 100%; text-align: left;
   background: var(--surface); border: 1.5px solid transparent; border-radius: 16px;
@@ -6128,7 +6151,7 @@ html, body { overscroll-behavior-x: none; overflow-x: hidden; }
 .onb .cat-piccoma { box-shadow: inset 0 0 0 1px #fff; }
 .onb-level-text { flex: 1; display: flex; flex-direction: column; gap: 2px; }
 .onb-level-key { font-size: 16px; font-weight: 800; color: var(--ink); }
-.onb-level-desc { font-size: 13px; color: var(--muted); line-height: 1.5; word-break: keep-all; }
+.onb-level-desc { font-size: 13px; color: var(--muted); line-height: 1.2; word-break: keep-all; }
 .onb-check { color: var(--accent-deep); opacity: 0; flex-shrink: 0; display: flex; align-items: center; transition: opacity .15s; }
 .onb-check.on { opacity: 1; }
 .onb-ratio { display: flex; flex-wrap: wrap; align-items: center; gap: 5px; margin: 12px 2px 4px;
@@ -6137,7 +6160,7 @@ html, body { overscroll-behavior-x: none; overflow-x: hidden; }
 .onb-ratio-item { display: inline-flex; align-items: center; gap: 2.5px; } /* 뱃지↔퍼센트 간격: 기존 5px의 절반 */
 .onb-ratio .badge-cat { padding: 3px 7px; } /* N2처럼 그룹 많은 레벨도 한 줄에 들어오게 살짝 축소 */
 .onb-note { display: flex; align-items: flex-start; gap: 7px; margin: 7px 2px 0;
-  font-size: 12.5px; color: rgba(0,0,0,.62); line-height: 1.6; word-break: keep-all; }
+  font-size: 12.5px; color: rgba(0,0,0,.62); line-height: 1.28; word-break: keep-all; }
 .onb-note .badge-cat { flex-shrink: 0; margin-top: 1px; }
 .onb-start { width: 100%; height: 44px; margin-top: 12px; border: none; border-radius: 15px;
   background: #fff; color: var(--ink); font-size: 16px; font-weight: 800; cursor: pointer; }
