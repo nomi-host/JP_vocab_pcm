@@ -9,6 +9,7 @@
 <meta name="apple-mobile-web-app-title" content="ピッ!とVOCA" />
 <title>ピッ!とVOCA</title>
 <link rel="apple-touch-icon" href="img/home-icon.png" />
+<link rel="manifest" href="manifest.json" />
 <script crossorigin src="https://unpkg.com/react@18.3.1/umd/react.production.min.js"></script>
 <script crossorigin src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.production.min.js"></script>
 <script src="https://unpkg.com/@babel/standalone@7.25.6/babel.min.js"></script>
@@ -197,7 +198,7 @@ const DAILY_TOTAL = 30;        // 오늘의 학습 하루 총량(복습+신규) 
 const NEW_RATIO_MIN = 0.3;     // 신규 최소 비율(30%) — 복습이 쌓여도 신규 자리 보장
 
 // 앱 버전/배포일 (정식 배포 시 v1.0으로). 통계탭 하단 워터마크 표시.
-const APP_VERSION = "v0.1.4";
+const APP_VERSION = "v0.1.5";
 const APP_BUILD = "2026-06-30";
 const FEEDBACK_EMAIL = "micki.02@kakaopiccoma.com";
 const FEEDBACK_URL = "https://script.google.com/macros/s/AKfycbyCuoe-Oa7hpb4tKlkeyiG3LFVWaLMTZG9M5wUxChsFzI12kGQEaGLhdLyuuAoLhktc/exec"; // 제보 메일 발송용 GAS 웹앱
@@ -2894,7 +2895,7 @@ function AddView({ cards, setCards, voiceRef }) {
   const [filled, setFilled] = useState(false);
 
   const aiUnavailable = (e) =>
-    setNote("자동 검색 실패: " + (e && e.message ? e.message : String(e)) + " — 아래 칸에 직접 입력해 등록할 수 있어요.");
+    setNote("딱 맞는 표현을 찾기 어려워요. 아래 칸에 직접 입력해 등록할 수 있어요.");
 
   // 검색: 단어+요미가나+뜻+예문 한 번에 자동 채움
   const doLookup = async () => {
@@ -4771,6 +4772,103 @@ function OnboardingView({ onDone, initial }) {
   );
 }
 
+/* ===================== 홈 화면 설치 유도 ===================== */
+// iOS Safari는 미설치 사이트의 localStorage를 7일 후 삭제한다. 홈 화면에 설치(standalone)하면
+// 진도가 보존되므로, 미설치 사용자에게 설치를 안내한다.
+const INSTALL_DISMISS_KEY = "jp-vocab-install-dismiss-v1";
+function isStandalone() {
+  try {
+    return (window.matchMedia && window.matchMedia("(display-mode: standalone)").matches) ||
+      window.navigator.standalone === true;
+  } catch (e) { return false; }
+}
+function isIOSDevice() {
+  try { return /iphone|ipad|ipod/i.test(navigator.userAgent || ""); } catch (e) { return false; }
+}
+function InstallBanner() {
+  const [show, setShow] = useState(false);
+  const [iosHelp, setIosHelp] = useState(false);
+  const deferred = useRef(null);
+  useEffect(() => {
+    if (isStandalone()) return;
+    try { if (localStorage.getItem(INSTALL_DISMISS_KEY)) return; } catch (e) {}
+    const onBip = (e) => { e.preventDefault(); deferred.current = e; setShow(true); };
+    window.addEventListener("beforeinstallprompt", onBip);
+    if (isIOSDevice()) setShow(true); // iOS는 beforeinstallprompt 미지원 → 수동 안내
+    return () => window.removeEventListener("beforeinstallprompt", onBip);
+  }, []);
+  const dismiss = () => { setShow(false); try { localStorage.setItem(INSTALL_DISMISS_KEY, "1"); } catch (e) {} };
+  const doInstall = async () => {
+    const d = deferred.current;
+    if (d) {
+      d.prompt();
+      try { await d.userChoice; } catch (e) {}
+      deferred.current = null; setShow(false);
+    } else if (isIOSDevice()) {
+      setIosHelp((v) => !v);
+    } else {
+      setIosHelp((v) => !v);
+    }
+  };
+  if (!show) return null;
+  return (
+    <div className="install-banner">
+      <div className="install-row">
+        <span className="install-emoji">📲</span>
+        <div className="install-text">
+          <b>홈 화면에 추가하세요</b>
+          <span>설치하면 학습 진도가 안전하게 보관되고, 앱처럼 빠르게 열려요.</span>
+        </div>
+        <div className="install-btns">
+          <button className="install-later" onClick={dismiss}>나중에</button>
+          <button className="install-do" onClick={doInstall}>설치</button>
+        </div>
+      </div>
+      {iosHelp && (
+        <div className="install-help">
+          {isIOSDevice()
+            ? <span>Safari 메뉴의 <b>공유 버튼</b>(네모에 ↑ 화살표)을 누른 뒤 <b>"홈 화면에 추가"</b>를 선택하세요.</span>
+            : <span>브라우저 메뉴(⋮)에서 <b>"홈 화면에 추가"</b> 또는 <b>"앱 설치"</b>를 선택하세요.</span>}
+        </div>
+      )}
+    </div>
+  );
+}
+
+/* ===================== 첫 사용자 가이드 ===================== */
+const GUIDE_KEY = "jp-vocab-guide-v1";
+function loadGuideSeen() { try { return !!localStorage.getItem(GUIDE_KEY); } catch (e) { return true; } }
+const GUIDE_STEPS = [
+  { emoji: "📚", title: "매일 학습 + 자동 복습", desc: "오늘 분량을 학습하면, 망각곡선에 맞춰 복습할 단어가 알아서 돌아와요." },
+  { emoji: "👆", title: "단어를 눌러보세요", desc: "뜻·예문·한자 상세를 보고, '학습 대기목록'에 넣으면 다음에 먼저 학습해요." },
+  { emoji: "🔊", title: "터치하면 발음", desc: "단어나 예문을 터치하면 원어민 발음이 나와요." },
+  { emoji: "🎧", title: "듣기 탭으로 흘려듣기", desc: "음성을 이어서 들을 수 있어요. 화면을 꺼도, 다른 앱을 써도 계속 재생돼요." },
+  { emoji: "🧩", title: "퀴즈로 점검", desc: "배운 단어를 퀴즈로 확인하고, 통계 탭에서 진도와 연속일을 볼 수 있어요." },
+];
+function FirstRunGuide({ onClose }) {
+  const finish = () => { try { localStorage.setItem(GUIDE_KEY, "1"); } catch (e) {} onClose(); };
+  return (
+    <div className="guide-overlay" onClick={finish}>
+      <div className="guide-modal" onClick={(e) => e.stopPropagation()}>
+        <img className="guide-mascot" src={FINISH_IMAGES[0]} alt="" />
+        <div className="guide-title">처음 오셨네요! 사용법 한눈에</div>
+        <div className="guide-list">
+          {GUIDE_STEPS.map((s, i) => (
+            <div className="guide-item" key={i}>
+              <span className="guide-emoji">{s.emoji}</span>
+              <div className="guide-item-text">
+                <b>{s.title}</b>
+                <span>{s.desc}</span>
+              </div>
+            </div>
+          ))}
+        </div>
+        <button className="guide-start" onClick={finish}>시작하기</button>
+      </div>
+    </div>
+  );
+}
+
 /* ===================== 루트 ===================== */
 function App() {
   const [cards, setCards] = useState(loadCards);
@@ -4782,6 +4880,7 @@ function App() {
   const [quizLog, setQuizLog] = useState(loadQuizLog);
   const [decks, setDecks] = useState(loadDecks);
   const [onboard, setOnboard] = useState(loadOnboard); // {level, done} | null
+  const [showGuide, setShowGuide] = useState(() => !loadGuideSeen()); // 첫 사용자 가이드
   const voiceRef = useJaVoice();
 
   useEffect(() => { saveDecks(decks); }, [decks]);
@@ -4866,6 +4965,8 @@ function App() {
         </div>
       </header>
 
+      <InstallBanner />
+
       <div
         className="scroll-area"
         onTouchStart={ptr.onTouchStart}
@@ -4903,6 +5004,8 @@ function App() {
           <Icon.Stats /><span>통계 & 설정</span>
         </button>
       </nav>
+
+      {showGuide && <FirstRunGuide onClose={() => setShowGuide(false)} />}
     </div>
   );
 }
@@ -5792,6 +5895,40 @@ html, body { overscroll-behavior-x: none; overflow-x: hidden; }
 .level-pick-desc { font-size: 13px; color: var(--ink-2); line-height: 1.5; word-break: keep-all; }
 .level-cancel { width: 100%; margin-top: 10px; height: 42px; border: none; border-radius: 12px;
   background: var(--fill); color: var(--ink-2); font-size: 14px; font-weight: 600; cursor: pointer; }
+
+/* 홈 화면 설치 유도 배너 */
+.install-banner { flex-shrink: 0; background: var(--accent-soft); border-bottom: 1px solid var(--accent-30);
+  padding: 10px 14px calc(10px + env(safe-area-inset-bottom, 0px) * 0); }
+.install-row { display: flex; align-items: center; gap: 10px; }
+.install-emoji { font-size: 22px; flex-shrink: 0; }
+.install-text { display: flex; flex-direction: column; gap: 1px; flex: 1; min-width: 0; }
+.install-text b { font-size: 13.5px; color: var(--ink); }
+.install-text span { font-size: 11.5px; color: var(--ink-2); line-height: 1.35; word-break: keep-all; }
+.install-btns { display: flex; align-items: center; gap: 6px; flex-shrink: 0; }
+.install-later { border: none; background: transparent; color: var(--muted); font-size: 12px; font-weight: 600;
+  padding: 7px 8px; cursor: pointer; white-space: nowrap; }
+.install-do { border: none; background: var(--accent); color: var(--on-accent); font-size: 13px; font-weight: 700;
+  padding: 8px 16px; border-radius: 980px; cursor: pointer; white-space: nowrap; }
+.install-help { margin-top: 8px; font-size: 12px; color: var(--ink-2); line-height: 1.5;
+  background: var(--surface); border-radius: 10px; padding: 9px 11px; word-break: keep-all; }
+.install-share { display: inline-block; font-family: -apple-system, BlinkMacSystemFont, sans-serif; }
+
+/* 첫 사용자 가이드 */
+.guide-overlay { position: fixed; inset: 0; background: rgba(0,0,0,.4); z-index: 60;
+  display: flex; align-items: center; justify-content: center; padding: 20px; animation: fade .15s ease; }
+.guide-modal { background: var(--surface); width: 100%; max-width: 380px; border-radius: 22px;
+  padding: 0 22px 22px; max-height: calc(100dvh - 40px); overflow-y: auto;
+  animation: pop .22s cubic-bezier(.2,.8,.2,1); text-align: center; }
+.guide-mascot { width: 88px; height: 88px; object-fit: contain; margin: -6px auto 2px; display: block; }
+.guide-title { font-size: 18px; font-weight: 800; color: var(--ink); margin-bottom: 16px; }
+.guide-list { display: flex; flex-direction: column; gap: 14px; text-align: left; margin-bottom: 20px; }
+.guide-item { display: flex; align-items: flex-start; gap: 12px; }
+.guide-emoji { font-size: 20px; flex-shrink: 0; line-height: 1.3; }
+.guide-item-text { display: flex; flex-direction: column; gap: 2px; }
+.guide-item-text b { font-size: 14px; color: var(--ink); }
+.guide-item-text span { font-size: 12.5px; color: var(--ink-2); line-height: 1.45; word-break: keep-all; }
+.guide-start { width: 100%; height: 48px; border: none; border-radius: 14px;
+  background: var(--accent); color: var(--on-accent); font-size: 16px; font-weight: 800; cursor: pointer; }
 `;
 
 try {
