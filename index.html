@@ -214,12 +214,11 @@ function extractExampleWords(card) {
   const ex = getExample(card);
   const toks = (ex && ex.tokens) || [];
   if (!toks.length) return [];
-  const selfW = card.word, selfR = card.reading || "";
   const sSurf = (a, b) => toks.slice(a, b).map((t) => t.t).join("");
   const sRead = (a, b) => toks.slice(a, b).map((t) => (t.r != null ? t.r : t.t)).join("");
   const out = [], seen = new Set();
   const push = (e) => {
-    if (!e || (e.word === selfW && (e.reading || "") === selfR) || seen.has(e.word)) return;
+    if (!e || seen.has(e.word)) return;
     seen.add(e.word); out.push(e);
   };
   let i = 0;
@@ -284,7 +283,7 @@ const DAILY_TOTAL = 30;        // 오늘의 학습 하루 총량(복습+신규) 
 const NEW_RATIO_MIN = 0.3;     // 신규 최소 비율(30%) — 복습이 쌓여도 신규 자리 보장
 
 // 앱 버전/배포일 (정식 배포 시 v1.0으로). 통계탭 하단 워터마크 표시.
-const APP_VERSION = "v0.2.0";
+const APP_VERSION = "v0.2.1";
 const APP_BUILD = "2026-06-30";
 const FEEDBACK_EMAIL = "micki.02@kakaopiccoma.com";
 const FEEDBACK_URL = "https://script.google.com/macros/s/AKfycbyCuoe-Oa7hpb4tKlkeyiG3LFVWaLMTZG9M5wUxChsFzI12kGQEaGLhdLyuuAoLhktc/exec"; // 제보 메일 발송용 GAS 웹앱
@@ -787,9 +786,10 @@ function sleep(ms, ctl) {
    2) 미설정 시 → claude.ai 아티팩트 내부 직접 호출 (이 화면 테스트용)
 
    배포 시 단어검색·예문 생성은 Apps Script 프록시(apiPost type:"gemini")로 간다. */
-async function askClaude(prompt) {
-  // Apps Script 프록시가 Gemini를 호출해 파싱된 JSON(또는 {text})을 돌려준다.
-  const data = await apiPost({ type: "gemini", prompt });
+async function askClaude(prompt, opts) {
+  // Vercel 프록시가 Gemini를 호출해 파싱된 JSON(또는 {text})을 돌려준다.
+  // temperature: 사전조회(존재 여부 판단)는 낮게(할루시네이션 억제), 예문 생성은 기본값(자연스러움).
+  const data = await apiPost({ type: "gemini", prompt, temperature: opts && opts.temperature });
   if (data && typeof data === "object" && !data.text) return data;
   const clean = String(data.text || "").replace(/```json|```/g, "").trim();
   return JSON.parse(clean);
@@ -835,11 +835,14 @@ function tokenizeJa(ja, furiMap) {
 /* Claude로 단어 검색: 한/일 입력 → {word, reading, meaning} */
 async function aiLookup(query) {
   const prompt =
-    `당신은 일한 사전입니다. 입력 단어(일본어 또는 한국어)에 대해 일본어 표제어와 정보를 JSON으로만 출력하세요.\n` +
+    `당신은 엄격한 일한 사전입니다. 입력 단어(일본어 또는 한국어)에 대해 일본어 표제어와 정보를 JSON으로만 출력하세요.\n` +
     `입력: "${query}"\n` +
-    `형식(JSON만, 설명 없이): {"word":"일본어 표제어(한자 포함 표기)","reading":"히라가나 요미가나(한자 없으면 빈 문자열)","meaning":"한국어 뜻(간결히, 쉼표로 여러 뜻)"}\n` +
-    `신조어·속어도 알고 있으면 채우세요. 모르면 meaning을 빈 문자열로.`;
-  const r = await askClaude(prompt);
+    `형식(JSON만, 설명 없이): {"found":true|false,"word":"일본어 표제어(한자 포함 표기)","reading":"히라가나 요미가나(한자 없으면 빈 문자열)","meaning":"한국어 뜻(간결히, 쉼표로 여러 뜻)"}\n` +
+    `신조어·속어도 실제로 쓰이는 것이면 채우세요. ` +
+    `중요: 실존하지 않거나 확신이 없는 단어를 절대 지어내지 마세요(할루시네이션 금지). ` +
+    `입력이 오타·존재하지 않는 표현·당신이 확신할 수 없는 단어라면 추측해서 만들지 말고 found를 false로, 나머지 필드는 빈 값으로 출력하세요.`;
+  const r = await askClaude(prompt, { temperature: 0.1 });
+  if (r && r.found === false) throw new Error("존재하지 않는 단어로 보여요");
   return {
     word: String(r.word || query),
     reading: String(r.reading || ""),
@@ -864,9 +867,10 @@ function normalizePos(raw) {
 
 async function aiWordInfo(query) {
   const prompt =
-    `당신은 일본어 학습 도우미입니다. 입력(일본어 또는 한국어)에 대해 JSON으로만 답하세요.\n` +
+    `당신은 엄격한 일본어 학습 도우미입니다. 입력(일본어 또는 한국어)에 대해 JSON으로만 답하세요.\n` +
     `입력: "${query}"\n` +
     `다음을 채우세요:\n` +
+    `- found: 입력이 실제로 존재하는 일본어 단어/표현이 맞으면 true, 아니면 false\n` +
     `- word: 일본어 표제어(한자 포함 정식 표기)\n` +
     `- reading: 표제어의 히라가나 요미가나(한자 없으면 빈 문자열)\n` +
     `- meaning: 한국어 뜻(간결, 여러 뜻은 쉼표)\n` +
@@ -877,9 +881,12 @@ async function aiWordInfo(query) {
     `키는 한 글자 한자가 아니라 단어 단위로, 오쿠리가나(보내는 가나)까지 포함한 표면형 전체여야 합니다. ` +
     `예: "拠り所"→"よりどころ", "申し込む"→"もうしこむ", "電化製品"→"でんかせいひん". ` +
     `읽기는 그 문맥에서 실제 발음대로 정확히(표제어 포함).\n` +
-    `형식(JSON만, 설명/코드펜스 없이): {"word":"","reading":"","meaning":"","pos":"","ja":"","ko":"","furigana":{}}\n` +
-    `신조어·속어도 알면 채우고, 정말 모르면 meaning을 빈 문자열로.`;
-  const r = await askClaude(prompt);
+    `형식(JSON만, 설명/코드펜스 없이): {"found":true,"word":"","reading":"","meaning":"","pos":"","ja":"","ko":"","furigana":{}}\n` +
+    `신조어·속어도 실제로 쓰이는 것이면 채우세요. ` +
+    `중요: 실존하지 않거나 확신이 없는 단어를 절대 지어내지 마세요(할루시네이션 금지). ` +
+    `입력이 오타·존재하지 않는 표현·당신이 확신할 수 없는 단어라면 추측해서 만들지 말고 found를 false로, 나머지 필드는 빈 값(ja/furigana는 빈 문자열/객체)으로 출력하세요.`;
+  const r = await askClaude(prompt, { temperature: 0.1 });
+  if (r && r.found === false) throw new Error("존재하지 않는 단어로 보여요");
   const word = String(r.word || query);
   const ja = String(r.ja || "");
   const furi = r.furigana && typeof r.furigana === "object" ? r.furigana : {};
@@ -5958,7 +5965,7 @@ html, body { overscroll-behavior-x: none; overflow-x: hidden; }
 /* 예문 속 단어 목록 */
 .wd-exwords { margin-top: 22px; padding-top: 20px; border-top: 1px solid var(--line); }
 .exw-row { display: flex; align-items: center; gap: 9px; width: 100%; text-align: left;
-  border: none; background: var(--fill); border-radius: 12px; padding: 11px 12px; cursor: pointer; margin-top: 8px; }
+  border: none; background: var(--bg); border-radius: 12px; padding: 11px 12px; cursor: pointer; margin-top: 8px; }
 .exw-row:active { background: var(--accent-soft); }
 .exw-main { display: flex; align-items: baseline; gap: 7px; flex-shrink: 0; min-width: 0; }
 .exw-word { font-size: 17px; font-weight: 700; color: var(--ink);
