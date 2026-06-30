@@ -290,7 +290,7 @@ const DAILY_TOTAL = 30;        // 오늘의 학습 하루 총량(복습+신규) 
 const NEW_RATIO_MIN = 0.3;     // 신규 최소 비율(30%) — 복습이 쌓여도 신규 자리 보장
 
 // 앱 버전/배포일 (정식 배포 시 v1.0으로). 통계탭 하단 워터마크 표시.
-const APP_VERSION = "v0.2.4";
+const APP_VERSION = "v0.2.5";
 const APP_BUILD = "2026-06-30";
 const FEEDBACK_EMAIL = "micki.02@kakaopiccoma.com";
 const FEEDBACK_URL = "https://script.google.com/macros/s/AKfycbyCuoe-Oa7hpb4tKlkeyiG3LFVWaLMTZG9M5wUxChsFzI12kGQEaGLhdLyuuAoLhktc/exec"; // 제보 메일 발송용 GAS 웹앱
@@ -5101,14 +5101,25 @@ function App() {
   const [showGuide, setShowGuide] = useState(false); // 첫 사용자 가이드
   const voiceRef = useJaVoice();
 
-  // 가이드는 마운트 직후 잠깐 뒤에 띄운다. 온보딩 완료 직후엔 잔상 제거용 전체 새로고침이
-  // 80ms 후 실행되는데, 가이드를 즉시 띄우면 '떴다가 새로고침'되는 글리치가 보이므로
-  // 새로고침 이후(재마운트) 시점에 한 번만 깔끔하게 노출되도록 지연시킨다.
+  // 가이드는 마운트 직후 잠깐 뒤에 띄운다(온보딩 완료 직후 화면 전환과 겹쳐 보이지 않도록).
   useEffect(() => {
     if (loadGuideSeen()) return;
     const t = setTimeout(() => setShowGuide(true), 450);
     return () => clearTimeout(t);
   }, []);
+
+  // iOS 상태바(상단 노치 영역) 잔상 방지: 온보딩 화면은 전체를 덮는 노란(.onb) 오버레이로
+  // 그려지는데, 실제 <body> 배경은 계속 흰색 계열(#f2f2f7)로 남아있으면 iOS가 상태바 색을
+  // 정할 때 두 색이 충돌해 온보딩이 끝난 뒤에도 상단에 노란 잔상이 남는 경우가 있다.
+  // body 배경과 theme-color meta를 온보딩 상태에 맞춰 실제로 바꿔줘서 충돌 자체를 없앤다.
+  useEffect(() => {
+    const showingOnboard = !onboard || !onboard.done;
+    try {
+      document.body.style.background = showingOnboard ? "#ffce10" : "";
+      const m = document.querySelector('meta[name="theme-color"]');
+      if (m) m.setAttribute("content", showingOnboard ? "#ffce10" : "#f2f2f7");
+    } catch (e) {}
+  }, [onboard && onboard.done]);
 
   useEffect(() => { saveDecks(decks); }, [decks]);
 
@@ -6036,11 +6047,11 @@ html, body { overscroll-behavior-x: none; overflow-x: hidden; }
 .wd-cat { margin-bottom: 6px; }
 .wd-actions { display: flex; flex-wrap: nowrap; gap: 8px; margin: 0 0 16px; }
 .wd-act-btn { display: inline-flex; align-items: center; justify-content: center; gap: 6px;
-  padding: 9px 14px; border-radius: 980px; flex-shrink: 0;
+  padding: 5px 8px; border-radius: 980px; flex-shrink: 0;
   border: 1px solid var(--line); background: var(--surface); color: var(--ink-2);
   font-size: 14px; font-weight: 700; cursor: pointer; white-space: nowrap; }
 .wd-act-btn svg { width: 16px; height: 16px; }
-.wd-act-icon { padding: 9px 12px; } /* 즐겨찾기: 아이콘만(텍스트 없음) */
+.wd-act-icon { padding: 5px 7px; } /* 즐겨찾기: 아이콘만(텍스트 없음) */
 .wd-act-btn.on { background: var(--accent); color: var(--on-accent); border-color: var(--accent-deep); }
 .wd-act-prio.on { background: var(--accent-30); color: var(--on-accent); border-color: var(--accent-60); }
 .wd-decks { margin: 8px 0 18px; }
@@ -6120,7 +6131,7 @@ html, body { overscroll-behavior-x: none; overflow-x: hidden; }
 .onb-level-desc { font-size: 13px; color: var(--muted); line-height: 1.5; word-break: keep-all; }
 .onb-check { color: var(--accent-deep); opacity: 0; flex-shrink: 0; display: flex; align-items: center; transition: opacity .15s; }
 .onb-check.on { opacity: 1; }
-.onb-ratio { display: flex; flex-wrap: wrap; align-items: center; gap: 5px; margin: 6px 2px 4px;
+.onb-ratio { display: flex; flex-wrap: wrap; align-items: center; gap: 5px; margin: 12px 2px 4px;
   font-size: 13px; font-weight: 700; color: var(--ink-2); }
 .onb-ratio-label { font-size: 12px; font-weight: 600; color: rgba(0,0,0,.6); }
 .onb-ratio-item { display: inline-flex; align-items: center; gap: 2.5px; } /* 뱃지↔퍼센트 간격: 기존 5px의 절반 */
@@ -6155,15 +6166,16 @@ html, body { overscroll-behavior-x: none; overflow-x: hidden; }
 .install-banner { flex-shrink: 0; background: var(--accent-soft); border-bottom: 1px solid var(--accent-30);
   padding: 10px 14px calc(10px + env(safe-area-inset-bottom, 0px) * 0); }
 .install-row { display: flex; align-items: center; gap: 11px; }
-.install-svg { width: 46px; height: 46px; flex-shrink: 0; object-fit: contain; }
+.install-svg { width: 46px; height: 46px; flex-shrink: 0; object-fit: contain;
+  contain: layout paint; } /* 내부 SVG 애니메이션이 형제 요소(버튼)의 레이아웃/페인트에 번지지 않게 격리 */
 .install-text { display: flex; flex-direction: column; gap: 1px; flex: 1; min-width: 0; }
 .install-text b { font-size: 13.5px; color: var(--ink); }
 .install-text span { font-size: 11.5px; color: var(--ink-2); line-height: 1.35; word-break: keep-all; }
-.install-btns { display: flex; align-items: center; gap: 6px; flex-shrink: 0; }
+.install-btns { display: flex; align-items: center; gap: 6px; flex-shrink: 0; position: relative; z-index: 1; }
 .install-later { border: none; background: transparent; color: var(--muted); font-size: 12px; font-weight: 600;
-  padding: 7px 8px; cursor: pointer; white-space: nowrap; }
+  padding: 7px 8px; cursor: pointer; white-space: nowrap; touch-action: manipulation; }
 .install-do { border: none; background: var(--accent); color: var(--on-accent); font-size: 13px; font-weight: 700;
-  padding: 8px 16px; border-radius: 980px; cursor: pointer; white-space: nowrap; }
+  padding: 8px 16px; border-radius: 980px; cursor: pointer; white-space: nowrap; touch-action: manipulation; }
 .install-help { margin-top: 8px; font-size: 12px; color: var(--ink-2); line-height: 1.5;
   background: var(--surface); border-radius: 10px; padding: 9px 11px; word-break: keep-all; }
 .install-share { display: inline-block; font-family: -apple-system, BlinkMacSystemFont, sans-serif; }
