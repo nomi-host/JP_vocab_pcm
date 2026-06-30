@@ -197,8 +197,8 @@ const DAILY_TOTAL = 30;        // 오늘의 학습 하루 총량(복습+신규) 
 const NEW_RATIO_MIN = 0.3;     // 신규 최소 비율(30%) — 복습이 쌓여도 신규 자리 보장
 
 // 앱 버전/배포일 (정식 배포 시 v1.0으로). 통계탭 하단 워터마크 표시.
-const APP_VERSION = "v0.1";
-const APP_BUILD = "2026-06-29";
+const APP_VERSION = "v0.1.1";
+const APP_BUILD = "2026-06-30";
 const FEEDBACK_EMAIL = "micki.02@kakaopiccoma.com";
 const FEEDBACK_URL = "https://script.google.com/macros/s/AKfycbyCuoe-Oa7hpb4tKlkeyiG3LFVWaLMTZG9M5wUxChsFzI12kGQEaGLhdLyuuAoLhktc/exec"; // 제보 메일 발송용 GAS 웹앱
 
@@ -1324,7 +1324,7 @@ function DetailModal({ card, onClose, voiceRef, allCards, cards, decks, onToggle
                   </button>
                 )}
                 {onTogglePriority && (
-                  <button className={"wd-act-btn" + (cur.priority ? " on" : "")}
+                  <button className={"wd-act-btn wd-act-prio" + (cur.priority ? " on" : "")}
                     onClick={() => onTogglePriority(cur.id)}>
                     <span>{cur.priority ? "✓ 학습 대기" : "＋ 학습 대기"}</span>
                   </button>
@@ -3224,16 +3224,18 @@ function WordDetailModal({ card, onClose, onSuspend, onUnsuspend, onSave, onDele
                   <span>품사 <b>{POS_LABEL[posClass(card)] || "기타"}</b></span>
                 </div>
                 {onTogglePriority && (
-                  <div className="modal-prio-row">
-                    <button
-                      className={"modal-prio-btn" + (card.priority ? " on" : "")}
-                      onClick={() => onTogglePriority(card.id)}>
-                      {card.priority ? "✓ 학습 대기목록에 있음" : "＋ 학습 대기목록에 넣기"}
-                    </button>
-                    <span className="modal-prio-hint">먼저 학습할 단어로 올려요</span>
-                  </div>
+                  <>
+                    <div className="modal-decks-label">학습 대기목록</div>
+                    <div className="modal-deck-chips">
+                      <button
+                        className={"deck-chip deck-chip-prio" + (card.priority ? " on" : "")}
+                        onClick={() => onTogglePriority(card.id)}>
+                        {card.priority ? "✓ 담김" : "＋ 학습 대기목록에 넣기"}
+                      </button>
+                    </div>
+                  </>
                 )}
-                <div className="modal-decks-label">단어장에 담기</div>
+                <div className="modal-decks-label modal-decks-label-gap">단어장에 담기</div>
                 <div className="modal-deck-chips">
                   {(decks || []).map((d) => {
                     const on = (card.decks || []).includes(d.id);
@@ -4068,16 +4070,27 @@ function FeedbackBox() {
   const [name, setName] = useState("");
   const [text, setText] = useState("");
   const [status, setStatus] = useState(""); // "" | sending | ok | fail
+  const [errDetail, setErrDetail] = useState("");
   const send = async () => {
     if (!text.trim() || status === "sending") return;
-    setStatus("sending");
+    setStatus("sending"); setErrDetail("");
     try {
       // 서버(프록시)를 거쳐 전송 — 브라우저→GAS 직접 POST는 CORS로 막혀 실패한다.
-      const d = await apiPost({ type: "feedback", name: name.trim(), message: text.trim(), ver: APP_VERSION, ua: navigator.userAgent || "" });
-      if (!d || !d.ok) throw new Error("send failed");
+      const r = await fetch(API_URL, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ type: "feedback", name: name.trim(), message: text.trim(), ver: APP_VERSION, ua: navigator.userAgent || "" }),
+      });
+      const d = await r.json().catch(() => null);
+      if (!r.ok || !d || !d.ok) {
+        throw new Error((d && (d.detail || d.error)) || ("HTTP " + r.status));
+      }
       setStatus("ok"); setText(""); setName("");
       setTimeout(() => { setStatus(""); setOpen(false); }, 1200);
-    } catch (e) { setStatus("fail"); }
+    } catch (e) {
+      setErrDetail(String((e && e.message) || e).slice(0, 160));
+      setStatus("fail");
+    }
   };
   return (
     <div className="feedback-box">
@@ -4091,7 +4104,12 @@ function FeedbackBox() {
             <textarea className="fb-text" value={text} onChange={(e) => setText(e.target.value)} rows={5}
               placeholder="예) OO 단어 발음이 이상해요 / OO 기능이 있으면 좋겠어요" />
             {status === "ok" && <div className="fb-msg ok">보냈어요. 감사합니다!</div>}
-            {status === "fail" && <div className="fb-msg fail">전송에 실패했어요. 잠시 후 다시 시도해 주세요.</div>}
+            {status === "fail" && (
+              <div className="fb-msg fail">
+                전송에 실패했어요. 잠시 후 다시 시도해 주세요.
+                {errDetail && <div className="fb-errdetail">({errDetail})</div>}
+              </div>
+            )}
             <div className="fb-btns">
               <button className="fb-cancel" onClick={() => setOpen(false)}>취소</button>
               <button className="fb-send" disabled={!text.trim() || status === "sending"} onClick={send}>
@@ -5289,12 +5307,10 @@ html, body { overscroll-behavior-x: none; overflow-x: hidden; }
 .modal-decks-head { font-size: 13px; color: var(--ink-2); margin-bottom: 10px; }
 .modal-decks-head b { color: var(--ink); }
 .modal-decks-label { font-size: 13px; font-weight: 600; color: var(--ink-2); margin-bottom: 8px; }
-.modal-prio-row { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; margin-bottom: 14px; }
-.modal-prio-btn { padding: 9px 14px; border-radius: 980px; border: 1px solid var(--accent-deep);
-  background: var(--surface); color: var(--accent-deep); font-size: 14px; font-weight: 700; cursor: pointer; }
-.modal-prio-btn.on { background: var(--accent); color: var(--on-accent); border-color: var(--accent-deep); }
-.modal-prio-hint { font-size: 12px; color: var(--muted); }
+.modal-decks-label-gap { margin-top: 16px; }
 .modal-deck-chips { display: flex; flex-wrap: wrap; gap: 7px; }
+/* 학습 대기목록 칩: on일 때 연한 노랑(진노랑 X) */
+.deck-chip-prio.on { background: var(--accent-30); color: var(--on-accent); border-color: var(--accent-60); }
 .deck-chip { padding: 7px 12px; border-radius: 980px; border: 1px solid var(--line);
   background: var(--surface); color: var(--ink-2); font-size: 13px; font-weight: 600; cursor: pointer; }
 .deck-chip.on { background: var(--accent); color: var(--on-accent); border-color: var(--accent-deep); }
@@ -5605,6 +5621,7 @@ html, body { overscroll-behavior-x: none; overflow-x: hidden; }
 .fb-msg { font-size: 13px; font-weight: 700; margin-top: 10px; text-align: center; }
 .fb-msg.ok { color: #2e9e5b; }
 .fb-msg.fail { color: #d33; }
+.fb-errdetail { margin-top: 4px; font-size: 11px; font-weight: 500; color: var(--muted); word-break: break-all; }
 .fb-text { width: 100%; box-sizing: border-box; border: 1px solid var(--line); border-radius: 12px;
   padding: 12px; font-size: 14px; font-family: inherit; resize: vertical; color: var(--ink); background: var(--bg); }
 .fb-btns { display: flex; gap: 10px; margin-top: 14px; }
@@ -5689,6 +5706,7 @@ html, body { overscroll-behavior-x: none; overflow-x: hidden; }
   font-size: 14px; font-weight: 700; cursor: pointer; }
 .wd-act-btn svg { width: 16px; height: 16px; }
 .wd-act-btn.on { background: var(--accent); color: var(--on-accent); border-color: var(--accent-deep); }
+.wd-act-prio.on { background: var(--accent-30); color: var(--on-accent); border-color: var(--accent-60); }
 .wd-decks { margin: 0 0 18px; }
 .wd-word { display: block; width: 100%; text-align: left; border: none; background: none;
   cursor: pointer; padding: 4px 0 2px; font-size: 32px; font-weight: 700; color: var(--ink);
