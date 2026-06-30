@@ -31,6 +31,12 @@
 	c5.51,0,9.97,4.46,9.97,9.97v9.25C253.29,260.55,248.83,265.01,243.32,265.01z"/>
 <path class="st3" d="M209.5,129.58h-54.42c-3.68,0-6.66-2.98-6.66-6.66V68.49c0-3.68,2.98-6.66,6.66-6.66h54.42
 	c3.68,0,6.66,2.98,6.66,6.66v54.42C216.17,126.6,213.18,129.58,209.5,129.58z"/>
-<rect x="15.52" y="136.47" class="st4" width="64.92" height="27.07"/>
-<polygon class="st4" points="73.06,201.26 73.06,98.74 124.32,150 "/>
+<g>
+	<animateTransform attributeName="transform" attributeType="XML" type="translate"
+		values="0 0; 26 0; 0 0; 0 0" keyTimes="0; 0.25; 0.5; 1"
+		dur="0.8s" repeatCount="3" fill="freeze" calcMode="spline"
+		keySplines="0.4 0 0.2 1; 0.4 0 0.2 1; 0 0 1 1"/>
+	<rect x="15.52" y="136.47" class="st4" width="64.92" height="27.07"/>
+	<polygon class="st4" points="73.06,201.26 73.06,98.74 124.32,150 "/>
+</g>
 </svg>
