@@ -2,7 +2,7 @@
 
 > 마지막 업데이트: 2026-06-30  
 > 작업 브랜치: `claude/japanese-word-app-index-gc8nud`  
-> 현재 버전: `v0.2.6`
+> 현재 버전: `v0.2.7`
 
 ---
 
@@ -96,6 +96,15 @@
 - **노란 잔상 버그 3차 대응**: v0.2.5(`body`+`theme-color` 동기화)로도 안 잡힘이 확인됨. 재진단 — "헤더"가 iOS 시스템 상태바가 아니라 **제거된 `position:fixed` 온보딩 오버레이의 합성 레이어 잔상 자체**일 가능성에 무게를 두고, `forceRepaint()`를 대폭 강화: ① 스크롤 1px 넛지(iOS의 fixed-레이어 재합성을 유도하는, 이 버그 유형에 가장 흔히 쓰이는 방법) ② `documentElement.opacity` 미세 토글(새 합성 레이어 강제 생성) ③ 기존 `display` 토글(리플로우) 3가지를 함께 수행하도록 변경. 또한 `<html>` 배경도 `<body>`와 같이 동기화하도록 추가. 온보딩 종료 시점의 repaint 트리거를 `OnboardingView`의 `onDone`이 아니라 App의 동기화 `useEffect` 한 곳으로 일원화(`wasOnboardRef`로 "방금 끝남" 전이만 감지).
 
 > ⚠️ 이번에도 iOS 실기기 검증 불가. 만약 v0.2.6에서도 안 잡히면, 다음 단계로 의심해볼 것: (a) `apple-mobile-web-app-status-bar-style`을 `default`에서 `black-translucent`로 바꿔보기(상태바 렌더링 방식 자체가 다름), (b) 온보딩 오버레이를 `position:fixed` 대신 그냥 일반 흐름(in-flow) 전체화면 div로 바꿔보기(애초에 별도 합성 레이어를 안 만들면 잔상 자체가 생길 수 없음 — 가장 근본적이지만 레이아웃 영향 검토 필요), (c) 최후 수단으로 `location.reload()`를 되살리되 reload 직전 0.1초 안 보이게 페이드 처리.
+
+#### v0.2.7 — 온보딩 행간 일부 되돌림, 예문 furigana는 그대로, **앱 셸 구조 변경(잔상+X버튼 버그 공통 원인 대응)**
+- **온보딩 행간**: `.onb-title`(1.04→1.3 원복) · `.onb-sub`(1.2→1.5 원복). `.onb-level-desc`(1.2)·`.onb-note`(1.28)는 v0.2.6 그대로 유지.
+- **목록 단어 상세(WordDetailModal) X버튼이 헤더에 가려 안 닫히는 버그(미설치 사파리에서)**: 원인 재구성 — `.app`가 `position:fixed; inset:0; overflow:hidden`이었고, `WordDetailModal`은 포털 없이 그 안 깊숙이(`scroll-area`→`content`→`ListView`) 중첩 렌더된다. **iOS Safari는 "fixed+overflow:hidden인 조상 안에 중첩된 fixed 자손"을 표준과 다르게(조상 박스 기준으로) 그리는 알려진 결함이 있다.** 특히 페이지 자체가 한 번도 진짜 스크롤되지 않는 구조(내부 `.scroll-area`만 스크롤)라 사파리 주소창이 자동으로 안 숨어 영구히 화면 일부를 가리는 상태와 겹쳐, 모달이 잘못된 기준으로 배치되며 X버튼이 주소창/헤더 뒤에 가려지고, 그 상태에서 스크롤하면 배경(`.scroll-area`)만 움직이는 것으로 보임.
+  - **근본 수정**: `.app`를 `position:fixed;inset:0` → **일반 흐름 + `height:100dvh`(fallback 100vh)** 로 변경. `html, body`에 `overflow:hidden` 명시(기존엔 `overflow-x: hidden`만 있었음 — Y축도 막아 내부 스크롤러만 스크롤되는 기존 동작은 그대로 유지). `.onb`(온보딩)도 같은 이유로 `position:fixed` 대신 `.app`(flex column)의 `flex:1` 자식으로 변경.
+  - **이 구조 변경이 "노란 잔상" 버그도 같이 고칠 가능성**: `.onb`가 더 이상 별도의 fixed 합성 레이어가 아니므로(`.app`의 평범한 flex 자식), React가 온보딩 → 본 화면으로 교체할 때 "제거된 fixed 레이어의 잔상이 안 지워지는" 부류의 버그가 애초에 발생할 토대 자체가 사라짐. v0.2.5/v0.2.6의 JS 기반 대응(`body`/`theme-color` 동기화, 강화된 `forceRepaint`)은 안전망으로 그대로 둠.
+  - 검증: Chromium(Playwright)으로 `.app`가 `position:fixed` 없이도 풀스크린 높이를 정확히 채우는지, `scroll-area` 안 깊숙이 중첩된 `.modal-overlay`가 (구조 변경 후) 여전히 진짜 뷰포트 전체를 정확히 덮는지(헤더 위까지 포함) 픽셀 단위로 확인함.
+
+> ⚠️ 이번 변경은 앱의 최상위 레이아웃 구조(`.app`/`.onb`)를 건드리는 더 근본적인 수정입니다. iOS Safari 실기기에서 **(1) X버튼이 이제 보이고 눌리는지, (2) 노란 잔상이 사라졌는지, (3) 헤더·탭바·당겨서새로고침 등 기존 레이아웃이 전혀 깨지지 않았는지** 셋 다 꼭 확인해 주세요. 구조 변경이라 회귀 위험이 이전 시도들보다 큽니다.
 
 ---
 

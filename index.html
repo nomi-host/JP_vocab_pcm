@@ -290,7 +290,7 @@ const DAILY_TOTAL = 30;        // 오늘의 학습 하루 총량(복습+신규) 
 const NEW_RATIO_MIN = 0.3;     // 신규 최소 비율(30%) — 복습이 쌓여도 신규 자리 보장
 
 // 앱 버전/배포일 (정식 배포 시 v1.0으로). 통계탭 하단 워터마크 표시.
-const APP_VERSION = "v0.2.6";
+const APP_VERSION = "v0.2.7";
 const APP_BUILD = "2026-06-30";
 const FEEDBACK_EMAIL = "micki.02@kakaopiccoma.com";
 const FEEDBACK_URL = "https://script.google.com/macros/s/AKfycbyCuoe-Oa7hpb4tKlkeyiG3LFVWaLMTZG9M5wUxChsFzI12kGQEaGLhdLyuuAoLhktc/exec"; // 제보 메일 발송용 GAS 웹앱
@@ -5276,7 +5276,7 @@ function App() {
 const STYLE_VARS = {};
 const CSS = `
 * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
-html, body { overscroll-behavior-x: none; overflow-x: hidden; }
+html, body { overscroll-behavior-x: none; overflow: hidden; }
 :root, .app {
   overscroll-behavior-x: none;
   --bg: #f2f2f7;
@@ -5297,7 +5297,11 @@ html, body { overscroll-behavior-x: none; overflow-x: hidden; }
   font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Hiragino Kaku Gothic ProN", "Noto Sans JP", system-ui, sans-serif;
 }
 .app {
-  position: fixed; inset: 0;
+  /* position:fixed가 아니라 일반 흐름 + height로: 모바일 사파리(특히 미설치 상태)에서
+     "fixed 안의 fixed 모달"이 주소창에 가려지거나 잘못된 기준으로 위치하는 문제 방지.
+     html/body가 overflow:hidden이라 어차피 페이지 자체는 스크롤되지 않는다. */
+  height: 100vh; height: 100dvh;
+  width: 100%;
   display: flex; flex-direction: column;
   background: var(--bg); color: var(--ink);
   overflow: hidden;
@@ -6129,17 +6133,19 @@ html, body { overscroll-behavior-x: none; overflow-x: hidden; }
 .cat-daily { background: #bdc3ff; color: #7e7cff; letter-spacing: -0.04em; }
 
 /* ===== 온보딩(레벨 선택) ===== */
-.onb { position: fixed; inset: 0; background: var(--accent); display: flex;
-  align-items: flex-start; justify-content: center; padding: 16px 20px 18px; overflow-y: auto; z-index: 50; }
+/* position:fixed가 아니라 .app(flex column)의 자식으로 flex:1 채움 — 별도 합성 레이어를
+   만들지 않아, 온보딩 종료 시 "노란 잔상"이 생길 여지 자체를 없앤다(근본 원인 대응). */
+.onb { flex: 1; min-height: 0; background: var(--accent); display: flex;
+  align-items: flex-start; justify-content: center; padding: 16px 20px 18px; overflow-y: auto; }
 /* 위쪽 정렬: 레벨 선택 시 헤더·버튼은 그대로 두고 설명(구성/안내)만 아래에 추가되게 한다. */
 .onb-inner { width: 100%; max-width: 420px; margin: 0 auto; }
 .onb-brand { margin-bottom: 6px; }
 .onb-brand-text { font-size: 14px; font-weight: 800; letter-spacing: .2px; color: rgba(0,0,0,.55); }
 .onb-head { display: flex; align-items: center; justify-content: space-between; gap: 14px; margin-bottom: 8px; }
 .onb-head-icon { height: 64px; width: auto; display: block; flex-shrink: 0; }
-.onb-title { font-size: 23px; font-weight: 800; color: var(--ink); line-height: 1.04;
+.onb-title { font-size: 23px; font-weight: 800; color: var(--ink); line-height: 1.3;
   letter-spacing: -0.4px; margin: 0; word-break: keep-all; }
-.onb-sub { font-size: 14px; color: rgba(0,0,0,.62); line-height: 1.2; margin: 0 0 9px; word-break: keep-all; }
+.onb-sub { font-size: 14px; color: rgba(0,0,0,.62); line-height: 1.5; margin: 0 0 9px; word-break: keep-all; }
 .onb-levels { display: flex; flex-direction: column; gap: 6px; }
 .onb-level { display: flex; align-items: center; gap: 12px; width: 100%; text-align: left;
   background: var(--surface); border: 1.5px solid transparent; border-radius: 16px;
