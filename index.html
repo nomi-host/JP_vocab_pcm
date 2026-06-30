@@ -84,8 +84,9 @@ const CATEGORIES = {
   N4:      { label: "N4",     cls: "cat-n4" },
   N5:      { label: "N5",     cls: "cat-n5" },
   piccoma: { label: "ピッ", cls: "cat-piccoma" },
+  daily:   { label: "DAILY", cls: "cat-daily" },
 };
-const CATEGORY_KEYS = ["N1", "N2", "N3", "N4", "N5", "piccoma"];
+const CATEGORY_KEYS = ["N1", "N2", "N3", "N4", "N5", "piccoma", "daily"];
 
 // ⚠️ PLACEHOLDER: 기존 단어엔 실제 category가 없어, 단어 문자열 해시로 임시 분류를 부여한다.
 // words.js에 진짜 JLPT category가 들어오면 그 값이 우선되어(아래 cardCategory) 자동 대체된다.
@@ -104,17 +105,17 @@ function cardCategory(w) {
 
 /* 온보딩: 레벨별 신규 단어 학습 비율(category 가중). 값 합은 100 기준. */
 const LEVEL_RATIOS = {
-  N1: { N1: 60, piccoma: 20, N2: 20 },
-  N2: { N2: 55, piccoma: 15, N3: 15, N1: 15 },
-  N3: { N3: 60, N4: 20, N2: 20 },
+  N1: { N1: 55, piccoma: 15, N2: 15, daily: 15 },
+  N2: { N2: 50, piccoma: 15, N3: 15, N1: 10, daily: 10 },
+  N3: { N3: 60, N4: 15, N2: 20, daily: 5 },
   N4: { N4: 70, N3: 30 },
   N5: { N5: 70, N4: 30 },
 };
 // 내 레벨 설명(통계탭). 비율을 자연어로 풀어서 표시.
 const LEVEL_DESC = {
-  N1: "JLPT N1 핵심단어 위주로, 픽코마 비즈니스 단어와 N2 복습을 곁들여 학습해요.",
-  N2: "JLPT N2 핵심단어 위주로, 픽코마 비즈니스 단어와 N3 복습·N1 맛보기를 곁들여 학습해요.",
-  N3: "JLPT N3 핵심단어 위주로, N4 복습과 N2 맛보기를 곁들여 학습해요.",
+  N1: "JLPT N1 핵심단어 위주로, 픽코마·신조어 표현(15%)과 N2 복습을 곁들여 학습해요.",
+  N2: "JLPT N2 핵심단어 위주로, 픽코마·신조어 표현(10%)과 N3 복습·N1 맛보기를 곁들여 학습해요.",
+  N3: "JLPT N3 핵심단어 위주로, N4 복습·N2 맛보기와 신조어 표현(5%)을 곁들여 학습해요.",
   N4: "JLPT N4 핵심단어 위주로, N3 맛보기를 곁들여 학습해요.",
   N5: "JLPT N5 기초단어 위주로, N4 맛보기를 곁들여 학습해요.",
 };
@@ -1838,7 +1839,7 @@ function StudyView({ cards, setCards, voiceRef, timeLog, session, setSession, de
                   <div className="start-panel-hint">분류·단어장을 골라 학습해요</div>
                   <select className="start-select" value={catSel} onChange={(e) => setCatSel(e.target.value)}>
                     <option value="">분류 선택…</option>
-                    <optgroup label="급수 · 픽코마">
+                    <optgroup label="급수 · 픽코마 · DAILY">
                       {CATEGORY_KEYS.map((k) => {
                         const n = cardsRef.current.filter((c) => !c.suspended && c.category === k).length;
                         return <option key={k} value={"cat:" + k}>{CATEGORIES[k].label} ({n})</option>;
@@ -1872,7 +1873,7 @@ function StudyView({ cards, setCards, voiceRef, timeLog, session, setSession, de
                   <div className="start-panel-hint">이미 배운 단어를 다시 복습해요</div>
                   <select className="start-select" value={revSel} onChange={(e) => setRevSel(e.target.value)}>
                     <option value="">전체 (배운 단어 모두)</option>
-                    <optgroup label="급수 · 픽코마">
+                    <optgroup label="급수 · 픽코마 · DAILY">
                       {CATEGORY_KEYS.map((k) => {
                         const n = cardsRef.current.filter((c) => !c.suspended && c.introducedOn && c.category === k).length;
                         return <option key={k} value={"cat:" + k}>{CATEGORIES[k].label} ({n})</option>;
@@ -2301,7 +2302,7 @@ function ListenView({ cards, voiceRef, decks }) {
     if (cfg.src === "today") return "오늘 학습 단어";
     if (cfg.src === "all") return "배운 단어 전체";
     if (cfg.src === "cat") {
-      if (cfg.cat && cfg.cat.indexOf("cat:") === 0) { const k = cfg.cat.slice(4); return k === "piccoma" ? "픽코마 비즈니스 단어" : (k + " 단어"); }
+      if (cfg.cat && cfg.cat.indexOf("cat:") === 0) { const k = cfg.cat.slice(4); return k === "piccoma" ? "픽코마 비즈니스 단어" : k === "daily" ? "신조어·일상표현" : (k + " 단어"); }
       if (cfg.cat && cfg.cat.indexOf("deck:") === 0) { const id = cfg.cat.slice(5); const d = (decks || []).find((x) => x.id === id); return d ? d.name : "단어장"; }
       return "카테고리";
     }
@@ -5634,6 +5635,7 @@ html, body { overscroll-behavior-x: none; overflow-x: hidden; }
 .cat-n4 { background: #f7dced; color: #e76c9e; }
 .cat-n5 { background: #e4dcf5; color: #a469f4; }
 .cat-piccoma { background: var(--accent); color: var(--on-accent); letter-spacing: -0.12em; padding-right: 9px; }
+.cat-daily { background: #929dff; color: #1c1c1e; letter-spacing: -0.04em; }
 
 /* ===== 온보딩(레벨 선택) ===== */
 .onb { position: fixed; inset: 0; background: var(--accent); display: flex;
