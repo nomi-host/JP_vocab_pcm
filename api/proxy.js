@@ -62,6 +62,36 @@ async function callGemini(prompt) {
   try { return JSON.parse(clean); } catch (_) { return { text: clean }; }
 }
 
+// ── 피드백(오류 제보·기능 요청) → Google Apps Script로 서버사이드 포워딩 ──
+// 브라우저에서 GAS로 직접 POST하면 GAS가 googleusercontent.com으로 302 리다이렉트하며
+// CORS에 막혀 실패한다. 함수(서버)에서 대신 보내면 CORS 제약이 없어 확실히 전송된다.
+const FEEDBACK_URL = "https://script.google.com/macros/s/AKfycbyCuoe-Oa7hpb4tKlkeyiG3LFVWaLMTZG9M5wUxChsFzI12kGQEaGLhdLyuuAoLhktc/exec";
+async function callFeedback(body) {
+  const name = (body && body.name ? String(body.name) : "").slice(0, 100);
+  const message = (body && body.message ? String(body.message) : "").slice(0, 2000);
+  if (!message.trim()) return { error: "no message" };
+  const payload = JSON.stringify({
+    name: name.trim(),
+    message: message.trim(),
+    ver: (body && body.ver ? String(body.ver) : "").slice(0, 40),
+    ua: (body && body.ua ? String(body.ua) : "").slice(0, 400),
+  });
+  try {
+    const r = await fetch(FEEDBACK_URL, {
+      method: "POST",
+      headers: { "content-type": "text/plain;charset=utf-8" }, // GAS 단순요청
+      body: payload,
+      redirect: "follow",
+    });
+    const text = await r.text();
+    if (!r.ok) return { error: "feedback failed", detail: text.slice(0, 200) };
+    try { const d = JSON.parse(text); if (d && d.error) return { error: "feedback rejected", detail: String(d.error).slice(0, 200) }; } catch (_) {}
+    return { ok: true };
+  } catch (e) {
+    return { error: "feedback error", detail: String(e && e.message ? e.message : e) };
+  }
+}
+
 // ── Google TTS (Chirp 3: HD) ─────────────────────────────────
 const LANG = { ja: { code: "ja-JP", f: "Aoede", m: "Alnilam" }, ko: { code: "ko-KR", f: "Aoede", m: "Alnilam" } };
 const VPOOL = ["Aoede","Kore","Leda","Zephyr","Puck","Charon","Fenrir","Orus","Alnilam"];
@@ -116,6 +146,10 @@ module.exports = async (req, res) => {
     if (body.type === "gemini") {
       if (bump(ipDay, "g:" + ip, DAY_WINDOW) > GEMINI_PER_DAY) { res.status(429).json({ error: "rate limit (gemini)" }); return; }
       res.status(200).json(await callGemini(body.prompt)); return;
+    }
+    if (body.type === "feedback") {
+      if (bump(ipDay, "fb:" + ip, DAY_WINDOW) > 50) { res.status(429).json({ error: "rate limit (feedback)" }); return; }
+      res.status(200).json(await callFeedback(body)); return;
     }
     res.status(400).json({ error: "bad type" });
   } catch (e) {
