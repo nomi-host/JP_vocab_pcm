@@ -290,7 +290,7 @@ const DAILY_TOTAL = 30;        // 오늘의 학습 하루 총량(복습+신규) 
 const NEW_RATIO_MIN = 0.3;     // 신규 최소 비율(30%) — 복습이 쌓여도 신규 자리 보장
 
 // 앱 버전/배포일 (정식 배포 시 v1.0으로). 통계탭 하단 워터마크 표시.
-const APP_VERSION = "v1.0.0";
+const APP_VERSION = "v1.0.1";
 const APP_BUILD = "2026-07-01";
 const FEEDBACK_EMAIL = "micki.02@kakaopiccoma.com";
 const FEEDBACK_URL = "https://script.google.com/macros/s/AKfycbyCuoe-Oa7hpb4tKlkeyiG3LFVWaLMTZG9M5wUxChsFzI12kGQEaGLhdLyuuAoLhktc/exec"; // 제보 메일 발송용 GAS 웹앱
@@ -6392,8 +6392,11 @@ html, body { overscroll-behavior-x: none; overflow: hidden; }
 .detail-btn:active { background: var(--fill); }
 
 /* 본문 */
+/* justify-content:center였을 때는 단어/연관단어/예문 유무로 콘텐츠 총높이가 카드마다
+   달라져, 그 중앙에 위치한 구분선(.divider)이 카드마다 다른 화면 위치에 그려졌다.
+   위쪽 고정 + 상단 패딩으로 바꿔, 단어 블록이 항상 같은 높이에서 시작하게 한다. */
 .card-body { flex: 1; display: flex; flex-direction: column;
-  align-items: center; justify-content: center; padding: 0; }
+  align-items: center; justify-content: flex-start; padding: 28px 0 0; }
 .word-block { display: flex; flex-direction: column; align-items: center; gap: 10px;
   padding: 8px 0 12px; }
 .word-furi { font-size: 15px; color: var(--muted); letter-spacing: 2px;
