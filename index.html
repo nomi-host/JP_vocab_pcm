@@ -290,8 +290,8 @@ const DAILY_TOTAL = 30;        // 오늘의 학습 하루 총량(복습+신규) 
 const NEW_RATIO_MIN = 0.3;     // 신규 최소 비율(30%) — 복습이 쌓여도 신규 자리 보장
 
 // 앱 버전/배포일 (정식 배포 시 v1.0으로). 통계탭 하단 워터마크 표시.
-const APP_VERSION = "v0.2.7";
-const APP_BUILD = "2026-06-30";
+const APP_VERSION = "v0.2.8";
+const APP_BUILD = "2026-07-01";
 const FEEDBACK_EMAIL = "micki.02@kakaopiccoma.com";
 const FEEDBACK_URL = "https://script.google.com/macros/s/AKfycbyCuoe-Oa7hpb4tKlkeyiG3LFVWaLMTZG9M5wUxChsFzI12kGQEaGLhdLyuuAoLhktc/exec"; // 제보 메일 발송용 GAS 웹앱
 
@@ -3364,7 +3364,7 @@ function WordDetailModal({ card, onClose, onSuspend, onUnsuspend, onSave, onDele
     setEditing(false);
   };
 
-  return (
+  return ReactDOM.createPortal(
     <div className="modal-overlay wd-overlay-pad" onClick={onClose}>
       <div className="modal wd-modal-cap" onClick={(e) => e.stopPropagation()}>
         <div className="modal-head">
@@ -3525,7 +3525,8 @@ function WordDetailModal({ card, onClose, onSuspend, onUnsuspend, onSave, onDele
           onToggleStar={onToggleStar} onTogglePriority={onTogglePriority}
           voiceRef={voiceRef} onClose={() => setShowDetail(false)} />
       )}
-    </div>
+    </div>,
+    document.body
   );
 }
 
@@ -3868,7 +3869,7 @@ function FilterBar({ flt, setFlt, deckFlt, setDeckFlt, posFlt, setPosFlt, catFlt
 function DeckManager({ decks, cards, onClose, onCreate, onRename, onDelete }) {
   const [newName, setNewName] = useState("");
   const countFor = (id) => cards.filter((c) => (c.decks || []).includes(id)).length;
-  return (
+  return ReactDOM.createPortal(
     <div className="modal-overlay" onClick={onClose}>
       <div className="modal deck-mgr" onClick={(e) => e.stopPropagation()}>
         <div className="deck-mgr-head">
@@ -3897,7 +3898,8 @@ function DeckManager({ decks, cards, onClose, onCreate, onRename, onDelete }) {
           ))}
         </div>
       </div>
-    </div>
+    </div>,
+    document.body
   );
 }
 
@@ -4300,7 +4302,7 @@ function FeedbackBox() {
   return (
     <div className="feedback-box">
       <button className="feedback-open" onClick={() => { setStatus(""); setOpen(true); }}>오류 제보 · 기능 요청</button>
-      {open && (
+      {open && ReactDOM.createPortal(
         <div className="fb-overlay" onClick={() => setOpen(false)}>
           <div className="fb-modal" onClick={(e) => e.stopPropagation()}>
             <div className="fb-title">오류 제보 · 기능 요청</div>
@@ -4317,7 +4319,8 @@ function FeedbackBox() {
               </button>
             </div>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
     </div>
   );
@@ -5008,9 +5011,20 @@ function isIOSDevice() {
    3) documentElement display 토글 — 레이아웃 자체도 강제로 리플로우. */
 function forceRepaint() {
   try {
+    // html/body가 overflow:hidden이라 스크롤 가능한 범위가 원래 0이었다 — 그래서
+    // 아래 스크롤 넛지가 지금까지 실제로는 아무 것도 안 움직이는(no-op) 상태였을 수 있다.
+    // 1px짜리 스페이서를 잠깐 붙여 진짜 스크롤 여지를 만든 뒤 넛지하고 원상복구한다.
+    const html = document.documentElement, body = document.body;
+    const prevHtmlOverflow = html.style.overflow, prevBodyOverflow = body.style.overflow;
+    const spacer = document.createElement("div");
+    spacer.style.cssText = "width:1px;height:1px;";
+    body.appendChild(spacer);
+    html.style.overflow = "auto"; body.style.overflow = "auto";
     const x = window.scrollX, y = window.scrollY;
     window.scrollTo(x, y + 1);
     window.scrollTo(x, y);
+    html.style.overflow = prevHtmlOverflow; body.style.overflow = prevBodyOverflow;
+    spacer.remove();
     const el = document.documentElement;
     const prevOpacity = el.style.opacity;
     el.style.opacity = "0.99999";
@@ -6143,9 +6157,9 @@ html, body { overscroll-behavior-x: none; overflow: hidden; }
 .onb-brand-text { font-size: 14px; font-weight: 800; letter-spacing: .2px; color: rgba(0,0,0,.55); }
 .onb-head { display: flex; align-items: center; justify-content: space-between; gap: 14px; margin-bottom: 8px; }
 .onb-head-icon { height: 64px; width: auto; display: block; flex-shrink: 0; }
-.onb-title { font-size: 23px; font-weight: 800; color: var(--ink); line-height: 1.3;
+.onb-title { font-size: 23px; font-weight: 800; color: var(--ink); line-height: 1.35;
   letter-spacing: -0.4px; margin: 0; word-break: keep-all; }
-.onb-sub { font-size: 14px; color: rgba(0,0,0,.62); line-height: 1.5; margin: 0 0 9px; word-break: keep-all; }
+.onb-sub { font-size: 14px; color: rgba(0,0,0,.62); line-height: 1.6; margin: 0 0 9px; word-break: keep-all; }
 .onb-levels { display: flex; flex-direction: column; gap: 6px; }
 .onb-level { display: flex; align-items: center; gap: 12px; width: 100%; text-align: left;
   background: var(--surface); border: 1.5px solid transparent; border-radius: 16px;

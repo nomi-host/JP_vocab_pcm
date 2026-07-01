@@ -106,6 +106,18 @@
 
 > ⚠️ 이번 변경은 앱의 최상위 레이아웃 구조(`.app`/`.onb`)를 건드리는 더 근본적인 수정입니다. iOS Safari 실기기에서 **(1) X버튼이 이제 보이고 눌리는지, (2) 노란 잔상이 사라졌는지, (3) 헤더·탭바·당겨서새로고침 등 기존 레이아웃이 전혀 깨지지 않았는지** 셋 다 꼭 확인해 주세요. 구조 변경이라 회귀 위험이 이전 시도들보다 큽니다.
 
+#### v0.2.8 — 온보딩 행간 진짜 원복, X버튼 버그 근본 원인 재진단(Portal), 잔상버그 스크롤넛지 실효성 수정
+
+- **온보딩 행간(타이틀/서브타이틀)**: v0.2.4에서 시작된 축소를 넘어, **v0.2.4 이전의 진짜 원래 값**으로 복원. `.onb-title` line-height `1.3→1.35`, `.onb-sub` line-height `1.5→1.6`. `.onb-level-desc`(1.2)·`.onb-note`(1.28)는 v0.2.7 그대로 유지(사용자가 이 둘은 "현재대로" 유지 요청).
+- **목록 단어 상세(WordDetailModal) X버튼 버그 — v0.2.7과 다른 원인으로 재진단**: v0.2.7에서 `.app`의 `position:fixed`를 없앤 구조 변경을 했음에도 이 버그가 재현됨. 코드를 다시 보니, 이 앱에서 정상 동작하는 한자/단어 상세 팝업(`DetailModal`)은 `ReactDOM.createPortal(..., document.body)`로 `.scroll-area` 밖(문서 최상단)에 그려지는 반면, **`WordDetailModal`·`DeckManager`·`FeedbackBox`의 오버레이는 포털을 안 쓰고 `.scroll-area`(`overflow-y:auto` + `-webkit-overflow-scrolling:touch`) 안에 그대로 중첩 렌더되고 있었다.** iOS Safari는 `-webkit-overflow-scrolling:touch`가 걸린 스크롤 컨테이너 안에 중첩된 `position:fixed` 자손의 위치 계산을 표준과 다르게(뷰포트가 아니라 그 스크롤 컨테이너 기준으로) 하는 알려진 결함이 있어, 오버레이가 `.scroll-area`가 시작하는 지점(헤더 바로 아래)부터 그려지며 상단(X버튼 위치)이 헤더에 가려지고, 터치 시 포털되지 않은 오버레이 뒤의 `.scroll-area`만 스크롤되는 것으로 보임. **v0.2.7의 `.app` 구조 변경은 이 특정 원인을 건드리지 못했을 가능성이 큼.**
+  - **수정**: `WordDetailModal`, `DeckManager`, `FeedbackBox`의 오버레이를 `DetailModal`과 동일하게 `ReactDOM.createPortal(..., document.body)`로 변경. `FirstRunGuide`(`.guide-overlay`)는 원래부터 `.app`의 직접 자식(스크롤 영역 밖)이라 포털 불필요, 변경 없음.
+- **노란 잔상 버그 — `forceRepaint()`의 스크롤 넛지가 애초에 무효였을 가능성**: `html, body { overflow: hidden }`이라 문서 자체의 스크롤 가능 범위가 항상 0이다. `window.scrollTo(x, y+1)` 같은 넛지는 스크롤 가능 범위가 있어야 실제로 스크롤 이벤트/합성 재계산을 유발하는데, 범위가 0이면 사실상 no-op이었을 가능성이 높음 — v0.2.4~v0.2.6이 이 트릭에 의존했지만 실제로는 작동하지 않았을 수 있다는 뜻.
+  - **수정**: `forceRepaint()` 실행 시 1px 스페이서 엘리먼트를 `body`에 잠깐 붙이고 `html`/`body`의 `overflow`를 일시적으로 `auto`로 바꿔 실제 스크롤 여지를 만든 뒤 넛지하고, 즉시 원래 상태(스페이서 제거 + `overflow:hidden` 복원)로 되돌림. opacity 토글·display 토글은 기존 그대로 유지(안전망).
+  - ⚠️ 이건 새 가설이며 여전히 iOS Safari 실기기 검증이 필요함. 이번에도 재현되면 HANDOFF v0.2.6에 적어둔 다음 후보 (a) `apple-mobile-web-app-status-bar-style: black-translucent`(단, standalone 모드에만 영향 — 미설치 사파리 탭 모드에는 효과 없을 가능성), (c) `location.reload()` + 페이드 최후수단을 검토.
+- APP_VERSION `v0.2.8` / APP_BUILD `2026-07-01`.
+
+> ⚠️ X버튼 버그는 이번엔 "다른 정상 동작하는 모달과 코드 패턴이 다르다"는 구조적 증거(포털 유무)에 기반한 수정이라 이전 시도들보다 확신도가 높습니다. 그래도 잔상버그는 여전히 가설 단계라 실기기 확인 꼭 필요합니다. 확인해야 할 것: **(1) 목록 탭에서 단어 눌렀을 때 X버튼이 헤더에 안 가려지고 바로 눌리는지, (2) 그 상태에서 모달 안 스크롤이 잘 되는지(배경만 스크롤되지 않는지), (3) 온보딩 완료 직후 노란 잔상이 그대로 남는지.**
+
 ---
 
 ## 배포 현황
