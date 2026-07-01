@@ -1,11 +1,12 @@
 # 개인용(원본) 앱 이식 가이드
 
-> 이 문서는 `JP_vocab_pcm`(사내 배포용) 브랜치 `claude/japanese-word-app-index-gc8nud`에서
-> 작업한 기능 5가지를, 별도로 관리 중인 **개인용 원본 앱**에 옮길 때 참고하는 핸드오프입니다.
+> 이 문서는 `JP_vocab_pcm`(사내 배포용) `main` 브랜치에서 작업한 기능들을, 별도로 관리 중인
+> **개인용 원본 앱**에 옮길 때 참고하는 핸드오프입니다.
 > 두 앱이 같은 `index.html` 단일 React 파일 구조(React 18 + Babel Standalone, 빌드 없음)라는
 > 전제로 작성했습니다. 구조가 다르면 함수/CSS 클래스명을 기준으로 대응되는 위치를 찾아 적용하세요.
 >
-> 기준 커밋: `f13ea73` (v0.2.2, 2026-06-30)
+> 기준 커밋: `8de28af` (v0.2.8 + Wayne QA, 2026-07-01) — **1~8번 섹션은 f13ea73(v0.2.2) 기준으로
+> 작성된 이전 내용 그대로이며, 9~11번 섹션이 이번 갱신분입니다.**
 
 ---
 
@@ -663,6 +664,160 @@ Playwright 등으로 `modal.getBoundingClientRect().bottom`과 `tabbar.getBoundi
 
 ---
 
+## 9. 목록 단어 상세/단어장 관리/피드백 팝업 — Portal로 이동 (X버튼 안 닫히는 버그 수정)
+
+### 무엇이 문제였나
+사파리(특히 **홈 화면에 추가하지 않은 일반 브라우저 탭**)에서 목록 탭 → 단어를 눌러 뜨는 상세
+팝업(`WordDetailModal`)의 X버튼이 **헤더에 가려져서 눌리지 않고**, 그 상태에서 스크롤하면 팝업이 아니라
+**뒤의 목록(배경)만 스크롤**되는 버그가 있었습니다.
+
+### 원인
+이 앱에는 팝업이 여러 개 있는데, 그중 학습 화면에서 쓰는 `DetailModal`(한자/연관단어 상세)만
+`ReactDOM.createPortal(..., document.body)`로 **문서 최상단에 직접** 그려집니다. 반면
+`WordDetailModal`(목록 탭), `DeckManager`(단어장 관리), `FeedbackBox`의 오류제보 팝업(`.fb-overlay`)은
+포털을 안 쓰고 각자 위치(스크롤되는 콘텐츠 영역 안)에 그냥 `position: fixed`로 렌더되고 있었습니다.
+
+iOS Safari는 `overflow-y: auto` + `-webkit-overflow-scrolling: touch`가 걸린 스크롤 컨테이너 **안에**
+중첩된 `position: fixed` 자손의 위치를 표준(뷰포트 기준)과 다르게, **그 스크롤 컨테이너 기준으로**
+계산하는 알려진 결함이 있습니다. 그래서 팝업이 스크롤 컨테이너가 시작하는 지점(헤더 바로 아래)부터
+그려지며 상단(X버튼)이 헤더에 가려지고, 터치도 포털되지 않은 팝업 뒤의 스크롤 영역에 그대로 전달돼
+배경만 스크롤되는 것으로 확인됐습니다.
+
+### 고친 방법 — 이미 정상 동작하는 `DetailModal`과 동일하게 Portal 적용
+세 곳의 `return (...)` 을 `return ReactDOM.createPortal((...), document.body)` 로만 바꾸면 됩니다.
+조건부 렌더인 `FeedbackBox`는 `{open && (...)}` 부분을 `{open && ReactDOM.createPortal((...), document.body)}`로.
+
+```jsx
+// WordDetailModal, DeckManager — 함수 전체가 이 형태
+return ReactDOM.createPortal(
+  <div className="modal-overlay ..." onClick={onClose}>
+    {/* ...내용은 그대로... */}
+  </div>,
+  document.body
+);
+
+// FeedbackBox — 조건부 렌더 부분만
+{open && ReactDOM.createPortal(
+  <div className="fb-overlay" onClick={() => setOpen(false)}>
+    {/* ...내용은 그대로... */}
+  </div>,
+  document.body
+)}
+```
+> ⚠️ `FirstRunGuide`(`.guide-overlay`)는 원래부터 `App`의 최상위(스크롤 영역 밖) 자식이라 이 버그의
+> 영향을 받지 않으므로 포털 처리하지 않았습니다. **팝업을 새로 추가할 때는, 그 팝업이 스크롤되는
+> 컨테이너 안쪽 어딘가(리스트 아이템 클릭 등)에서 열리는 구조라면 처음부터 `createPortal`로 만드세요.**
+
+### 이식 시 체크리스트
+개인 앱에 `position: fixed` 오버레이 팝업이 스크롤 컨테이너 안에 중첩돼 있는 곳이 있다면(특히 리스트
+아이템을 눌러서 여는 상세/모달류), 전부 같은 버그에 노출돼 있을 수 있습니다. `ReactDOM.createPortal`을
+이미 쓰는 팝업과 안 쓰는 팝업을 목록으로 뽑아 비교해 보세요.
+
+---
+
+## 10. 온보딩 앱 셸 구조 변경 + 상단 잔상(노란색) 버그 대응 (누적 히스토리)
+
+### 무엇이 문제였나
+온보딩(레벨 선택) 화면은 `position: fixed`로 전체화면을 노란 배경(`--accent`)으로 덮는 오버레이였습니다.
+온보딩이 끝나고 본 화면으로 전환될 때, iOS Safari에서 **상단(노치/상태바 인접 영역)에 노란 잔상이
+남는** 버그가 있었고, 여러 차례 대응을 거쳤습니다.
+
+### 시도 순서 (전부 코드에 남겨둔 안전망 — 나중에 걷어내지 말 것)
+1. **`forceRepaint()` 도입** — `documentElement`를 한 프레임 `display:none`→복원해 강제 리플로우.
+2. **`body`/`html` 배경 + `theme-color` meta 동기화** — 온보딩 상태(`onboard.done`)에 맞춰
+   실제 배경색과 `<meta name="theme-color">`를 JS로 동기화(불일치가 잔상 원인 중 하나로 추정됨).
+3. **`forceRepaint()` 강화** — 스크롤 1px 넛지 + opacity 미세 토글 + display 토글 3종 조합.
+4. **앱 셸 구조 변경(가장 근본적)** — `.app`을 `position: fixed; inset: 0; overflow: hidden` 에서
+   **일반 흐름(in-flow) + `height: 100dvh`(fallback `100vh`)** 로 변경. `.onb`(온보딩)도 같은 이유로
+   `position: fixed` 대신 `.app`(flex column)의 `flex: 1` 자식으로 변경. 별도 합성(compositing) 레이어를
+   안 만들면 "제거된 fixed 레이어의 잔상" 부류의 버그가 애초에 생길 토대가 없어진다는 논리.
+5. **스크롤 넛지의 실효성 문제 발견** — `html, body { overflow: hidden }` 이라 문서 자체의 스크롤
+   가능 범위가 항상 0이었고, 3번의 "스크롤 1px 넛지"가 사실상 no-op이었을 가능성이 확인됨. 아래처럼
+   `forceRepaint()` 실행 시 잠깐 스크롤을 허용하도록 수정:
+```javascript
+function forceRepaint() {
+  try {
+    // html/body가 overflow:hidden이라 스크롤 가능한 범위가 원래 0이었다 — 그래서
+    // 아래 스크롤 넛지가 지금까지 실제로는 아무 것도 안 움직이는(no-op) 상태였을 수 있다.
+    // 1px짜리 스페이서를 잠깐 붙여 진짜 스크롤 여지를 만든 뒤 넛지하고 원상복구한다.
+    const html = document.documentElement, body = document.body;
+    const prevHtmlOverflow = html.style.overflow, prevBodyOverflow = body.style.overflow;
+    const spacer = document.createElement("div");
+    spacer.style.cssText = "width:1px;height:1px;";
+    body.appendChild(spacer);
+    html.style.overflow = "auto"; body.style.overflow = "auto";
+    const x = window.scrollX, y = window.scrollY;
+    window.scrollTo(x, y + 1);
+    window.scrollTo(x, y);
+    html.style.overflow = prevHtmlOverflow; body.style.overflow = prevBodyOverflow;
+    spacer.remove();
+    // ...opacity 토글 + display 토글은 기존 그대로...
+  } catch (e) {}
+}
+```
+
+### ⚠️ 아직 실기기(iOS Safari) 완전 검증 안 됨
+4번(구조 변경)까지는 실기기에서 X버튼 버그와 잔상 버그 재현이 확인됐고(→ 섹션 9로 별도 원인이 밝혀짐),
+5번(스크롤 넛지 실효성 수정)은 **가설 단계**입니다. 이식 후 이 잔상 버그가 재현되면, 다음 후보를
+순서대로 시도해 보세요:
+- `apple-mobile-web-app-status-bar-style`을 `default`에서 `black-translucent`로 (단, **PWA 설치(standalone)
+  모드에만 영향** — 일반 브라우저 탭에는 효과 없음)
+- 최후 수단: `location.reload()`를 온보딩 종료 시점에 되살리되, reload 직전 0.1초 페이드 처리로
+  깜빡임을 숨김
+
+### 온보딩 행간(line-height) 최종값 — 참고용
+여러 차례 축소/복원을 거쳐 최종적으로 정착된 값입니다. 개인 앱에도 같은 디자인을 적용한다면 참고하세요:
+```css
+.onb-title { font-size: 23px; line-height: 1.35; }       /* 최초 26px/1.35에서 폰트만 23px로 축소, 행간은 원복 */
+.onb-sub { font-size: 14px; line-height: 1.6; }            /* 원래 값으로 복원 */
+.onb-level-desc { font-size: 13px; line-height: 1.2; }     /* 축소된 값 유지(사용자가 이 항목만은 유지 요청) */
+.onb-note { font-size: 12.5px; line-height: 1.28; }        /* 축소된 값 유지 */
+```
+
+---
+
+## 11. 발음 규칙(WORD_SPEECH_OVERRIDE) 대량 보강 — 1,010건 추가 (Wayne QA)
+
+### 배경
+전 단어(8,610개) TTS 발음 QA를 외주(Wayne)로 진행했고, 그 결과로 `WORD_SPEECH_OVERRIDE` 객체에
+**1,010건**을 새로 추가했습니다(기존 21건 → 총 1,032건). 개인 앱이 같은/겹치는 단어 데이터를 쓴다면
+이 보강분이 곧바로 발음 품질 개선으로 이어집니다.
+
+### 동작 원리 — `wordSpeech(card)`
+```javascript
+function wordSpeech(card) {
+  const ov = WORD_SPEECH_OVERRIDE[card.word] || (card.reading && WORD_SPEECH_OVERRIDE[card.reading]);
+  if (ov) return withWordStop(tildeToYomi(ov));
+  // 단어는 한자 원문 그대로 보낸다(엔진이 사전형으로 또렷이 읽음).
+  // 읽기(히라가나)로 보내면 고립 가나가 오분절된다. 多音 오독 단어만 OVERRIDE에 읽기 등록.
+  const clean = card.word.split(/[／/↔≠\s(]/)[0];
+  return withWordStop(tildeToYomi(clean));
+}
+```
+**핵심**: TTS는 기본적으로 `card.word`(한자 원문)를 그대로 엔진에 보냅니다. `card.reading`(화면에 표시되는
+읽기)은 TTS 발음에 **전혀 영향을 주지 않습니다** — `WORD_SPEECH_OVERRIDE`에 등록된 키만 예외적으로
+그 단어를 말할 때 히라가나 값으로 대체됩니다. 즉 "표시되는 읽기가 맞다"와 "TTS가 맞게 읽는다"는
+**서로 독립적인 문제**이니, 읽기 필드만 고치고 발음이 좋아졌다고 착각하지 않도록 주의하세요.
+
+### 추가된 항목의 유형 (이식 시 그대로 옮기면 되는 것들)
+- **多音 한자 오독 방지**: 여러 음/훈독이 있는 한자를 엔진이 잘못 읽는 경우 히라가나로 강제
+  (예: `"心中": "しんちゅう"`, `"日本": "にほん"`).
+- **복수 표기/괄호 주석 정리**: `word`나 `reading` 필드에 `"고교; 고등학교"`처럼 여러 표기가 같이
+  들어있거나, `"(かん)"`·`"(な)"` 같은 품사 주석이 섞여 있으면 그대로 엔진에 보내면 안 되므로,
+  대표 표기 하나만 말하도록 정리(예: `"高校; 高等学校": "こうこう"`).
+- **가타카나 축약어의 실제 발음**: 표기와 실제로 읽는 방식이 다른 축약어(예: `"ラジオカセ": "らじかせ"`).
+- **속어/신조어 특유 표기**: `daily` 카테고리의 신조어(`ダメ出し`, `ドン引き` 등)는 표기 그대로 읽으면
+  부자연스러운 경우가 많아 대량으로 등록됨.
+
+### 이식 방법
+`docs/WORD_SPEECH_OVERRIDE_additions.js`(Wayne QA 산출물, 레포 밖 인수 폴더에 있음 — 필요하면 이
+저장소의 `WORD_SPEECH_OVERRIDE` 객체 정의(약 586번째 줄)를 열어 직접 복사)를 개인 앱의 동일 객체에
+그대로 붙여넣으면 됩니다. **기존 키와 충돌 여부만 확인**하세요(이번 반영 시 충돌 0건이었음).
+개인 앱의 단어 데이터가 다르면, 겹치지 않는 단어의 override는 그냥 무해하게 무시됩니다(키가 없으면
+`wordSpeech`가 기본 로직으로 폴백).
+
+---
+
 ## 공통 주의사항 (전체 기능 해당)
 
 1. **버전 표기**: `index.html` 상단 `APP_VERSION`/`APP_BUILD`를 기능 추가할 때마다 갱신하는 컨벤션을
@@ -684,8 +839,11 @@ Playwright 등으로 `modal.getBoundingClientRect().bottom`과 `tabbar.getBoundi
 | 4. TTS 보이스 고정/지연단축 | `b689396` |
 | 5. 흘려듣기 목록 → 상세 (기본 탐색) | `f13ea73` |
 | 6. 흘려듣기 상세 액션(별·학습대기·단어장) + 범위기반 랜덤 | `d2e50ba` (v0.2.3) |
-| 7. 듣기 "화면 보면서 공부하기" 단어 탭 + bg모드 한정 버그 수정 | v0.2.4 커밋(이 문서와 같은 커밋) |
-| 8. 목록 단어 상세 최대 크기(탭바 위 20px) | v0.2.4 커밋(이 문서와 같은 커밋) |
+| 7. 듣기 "화면 보면서 공부하기" 단어 탭 + bg모드 한정 버그 수정 | v0.2.4 커밋 |
+| 8. 목록 단어 상세 최대 크기(탭바 위 20px) | v0.2.4 커밋 |
+| 9. 팝업 3종 Portal 이동 (X버튼 버그) | v0.2.8 (`5a5877c`) |
+| 10. 앱 셸 구조 변경 + 잔상버그 대응 | v0.2.7(`b8ac036`) 구조변경 → v0.2.8(`5a5877c`) 스크롤넛지 수정 |
+| 11. WORD_SPEECH_OVERRIDE 1,010건 추가 | Wayne QA 반영 커밋(`0012860`) |
 
-저장소: `nomi-host/JP_vocab_pcm`, 브랜치 `claude/japanese-word-app-index-gc8nud`.
+저장소: `nomi-host/JP_vocab_pcm`, 현재 `main` 브랜치에 전부 병합·배포됨(`pitto-voca.vercel.app`).
 `git show <커밋>` 으로 정확한 diff를 바로 확인할 수 있습니다.
