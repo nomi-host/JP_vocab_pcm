@@ -290,7 +290,7 @@ const DAILY_TOTAL = 30;        // 오늘의 학습 하루 총량(복습+신규) 
 const NEW_RATIO_MIN = 0.3;     // 신규 최소 비율(30%) — 복습이 쌓여도 신규 자리 보장
 
 // 앱 버전/배포일 (정식 배포 시 v1.0으로). 통계탭 하단 워터마크 표시.
-const APP_VERSION = "v1.0.1";
+const APP_VERSION = "v1.0.2";
 const APP_BUILD = "2026-07-01";
 const FEEDBACK_EMAIL = "micki.02@kakaopiccoma.com";
 const FEEDBACK_URL = "https://script.google.com/macros/s/AKfycbyCuoe-Oa7hpb4tKlkeyiG3LFVWaLMTZG9M5wUxChsFzI12kGQEaGLhdLyuuAoLhktc/exec"; // 제보 메일 발송용 GAS 웹앱
@@ -2316,6 +2316,12 @@ const Icon = {
       <rect x="16" y="5" width="2.4" height="14" rx="1" fill="currentColor" />
     </svg>
   ),
+  AddCircle: (p) => (
+    <svg viewBox="0 0 24 24" width="22" height="22" fill="none" {...p}>
+      <circle cx="12" cy="12" r="9" stroke="currentColor" strokeWidth="2" />
+      <path d="M12 8v8M8 12h8" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+    </svg>
+  ),
 };
 
 /* 후리가나 토큰 렌더링: showFuri면 한자(t)에 (r) 괄호 읽기 부여 */
@@ -2416,9 +2422,41 @@ function DetailModal({ card, onClose, voiceRef, allCards, cards, decks, onToggle
   const relWords = sel ? wordsWithKanji(sel, 40, allCards) : [];
   const jlptLabel = info && info.jlpt ? "N" + info.jlpt : null;
 
+  // 아래로 스와이프해서 닫기: 본문(bodyRef)이 맨 위로 스크롤된 상태에서 아래로 끌 때만 시트를 같이 끌고,
+  // 임계값을 넘기면 닫는다. 스크롤 중이거나 위로 끄는 중엔 원래 스크롤 동작을 그대로 둔다.
+  const bodyRef = useRef(null);
+  const dragRef = useRef({ startY: 0, dragging: false, dy: 0 });
+  const [dragY, setDragY] = useState(0);
+  const onSheetTouchStart = (e) => {
+    if (e.touches.length !== 1) return;
+    dragRef.current = { startY: e.touches[0].clientY, dragging: false, dy: 0 };
+  };
+  const onSheetTouchMove = (e) => {
+    const dy = e.touches[0].clientY - dragRef.current.startY;
+    if (!dragRef.current.dragging) {
+      const atTop = !bodyRef.current || bodyRef.current.scrollTop <= 0;
+      if (dy > 6 && atTop) dragRef.current.dragging = true;
+      else return;
+    }
+    if (dy < 0) { dragRef.current.dragging = false; setDragY(0); return; }
+    e.stopPropagation();
+    if (e.cancelable) e.preventDefault();
+    dragRef.current.dy = dy;
+    setDragY(dy);
+  };
+  const onSheetTouchEnd = () => {
+    const wasDragging = dragRef.current.dragging, dy = dragRef.current.dy;
+    dragRef.current.dragging = false; dragRef.current.dy = 0;
+    if (!wasDragging) return;
+    if (dy > 110) onClose(); else setDragY(0);
+  };
+
   return ReactDOM.createPortal(
     <div className="kanji-modal-overlay" onClick={onClose}>
-      <div className="kanji-modal" onClick={(e) => e.stopPropagation()}>
+      <div className="kanji-modal" onClick={(e) => e.stopPropagation()}
+        onTouchStart={onSheetTouchStart} onTouchMove={onSheetTouchMove} onTouchEnd={onSheetTouchEnd}
+        style={{ transform: dragY ? `translateY(${dragY}px)` : undefined,
+          transition: dragRef.current.dragging ? "none" : "transform .25s cubic-bezier(.25,.1,.25,1)" }}>
         <div className="kanji-modal-head">
           {canBack ? (
             <button className="kanji-modal-x" onClick={goBack} aria-label="뒤로"><Icon.Back /></button>
@@ -2429,7 +2467,7 @@ function DetailModal({ card, onClose, voiceRef, allCards, cards, decks, onToggle
 
         {view === "word" ? (
           /* ===== 1단계: 단어 상세 ===== */
-          <div className="kanji-modal-body word-detail">
+          <div className="kanji-modal-body word-detail" ref={bodyRef}>
             {(() => { const cat = cardCategory(cur); return cat ? (
               <div className="wd-cat"><CategoryBadge category={cat} /></div>
             ) : null; })()}
@@ -2565,7 +2603,7 @@ function DetailModal({ card, onClose, voiceRef, allCards, cards, decks, onToggle
           </div>
         ) : (
           /* ===== 2단계: 한자 상세 ===== */
-          <div className="kanji-modal-body">
+          <div className="kanji-modal-body" ref={bodyRef}>
             {jlptLabel && <span className={"kanji-jlpt cat-n" + info.jlpt}>{jlptLabel}</span>}
             <button className="kanji-big"
               onClick={() => sel && speakSmart(sel, voiceRef, null, "word")}
@@ -6109,6 +6147,7 @@ const GUIDE_STEPS = [
   { img: "img/icons-03.png", title: "터치하면 발음", desc: "단어나 예문을 터치하면 원어민 발음이 나와요." },
   { img: "img/icons-04.png", title: "듣기 탭으로 흘려듣기", desc: "음성을 이어서 들을 수 있어요. 화면을 꺼도, 다른 앱을 써도 계속 재생돼요." },
   { img: "img/icons-05.png", title: "퀴즈로 점검", desc: "배운 단어를 퀴즈로 확인하고, 통계 탭에서 진도와 연속일을 볼 수 있어요." },
+  { icon: Icon.AddCircle, title: "없는 단어는 직접 등록", desc: "목록 탭의 '＋ 새 단어 등록'에서 사전에 없는 단어도 직접 추가할 수 있어요." },
 ];
 function FirstRunGuide({ onClose }) {
   const finish = () => { try { localStorage.setItem(GUIDE_KEY, "1"); } catch (e) {} onClose(); };
@@ -6119,7 +6158,9 @@ function FirstRunGuide({ onClose }) {
         <div className="guide-list">
           {GUIDE_STEPS.map((s, i) => (
             <div className="guide-item" key={i}>
-              <span className="guide-icon"><img src={s.img} alt="" /></span>
+              <span className="guide-icon">
+                {s.icon ? <s.icon width={26} height={26} style={{ color: "var(--accent-deep)" }} /> : <img src={s.img} alt="" />}
+              </span>
               <div className="guide-item-text">
                 <b>{s.title}</b>
                 <span>{s.desc}</span>
@@ -6127,6 +6168,7 @@ function FirstRunGuide({ onClose }) {
             </div>
           ))}
         </div>
+        <div className="guide-footnote">이 안내는 츠군을 누르면 언제든 다시 확인할 수 있어요.</div>
         <button className="guide-start" onClick={finish}>시작하기</button>
       </div>
     </div>
@@ -6252,7 +6294,10 @@ function App() {
       <header className="topbar" onClick={() => { const sa = document.querySelector(".scroll-area"); if (sa) sa.scrollTo({ top: 0, behavior: "smooth" }); }}>
         <div className="topbar-inner">
           <div className="topbar-title">ピッ!とVOCA</div>
-          <img className="topbar-icon" src={HEADER_ICON} alt="" />
+          <button className="topbar-icon-btn" aria-label="사용법 다시 보기" title="사용법 다시 보기"
+            onClick={(e) => { e.stopPropagation(); setShowGuide(true); }}>
+            <img className="topbar-icon" src={HEADER_ICON} alt="" />
+          </button>
         </div>
       </header>
 
@@ -6339,6 +6384,8 @@ html, body { overscroll-behavior-x: none; overflow: hidden; }
 .topbar-inner { max-width: 480px; margin: 0 auto; display: flex;
   align-items: center; justify-content: space-between; }
 .topbar-title { font-size: 22px; font-weight: 700; letter-spacing: -0.3px; }
+.topbar-icon-btn { border: none; background: none; padding: 0; margin: 0; cursor: pointer;
+  display: block; -webkit-tap-highlight-color: transparent; }
 .topbar-icon { height: 37px; width: auto; display: block; }
 
 .scroll-area { flex: 1; overflow-y: auto; -webkit-overflow-scrolling: touch; }
@@ -7257,6 +7304,7 @@ html, body { overscroll-behavior-x: none; overflow: hidden; }
 .guide-item-text { display: flex; flex-direction: column; gap: 2px; }
 .guide-item-text b { font-size: 14px; color: var(--ink); }
 .guide-item-text span { font-size: 12.5px; color: var(--ink-2); line-height: 1.45; word-break: keep-all; }
+.guide-footnote { font-size: 12px; color: var(--ink-2); text-align: center; margin: -8px 0 16px; word-break: keep-all; }
 .guide-start { width: 100%; height: 48px; border: none; border-radius: 14px;
   background: var(--accent); color: var(--on-accent); font-size: 16px; font-weight: 800; cursor: pointer; }
 `;
