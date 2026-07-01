@@ -40,16 +40,19 @@ function clientIp(req) {
 }
 
 // ── Gemini ───────────────────────────────────────────────────
-async function callGemini(prompt) {
+// temperature: 호출부에서 지정 가능(사전조회처럼 사실 확인이 중요한 경우 낮게 → 할루시네이션 억제).
+// 미지정 시 기본 0.7(예문 생성 등 자연스러움이 더 중요한 경우).
+async function callGemini(prompt, temperature) {
   if (!prompt || typeof prompt !== "string" || prompt.length > 2000) return { error: "bad prompt" };
   const key = process.env.GEMINI_API_KEY;
   if (!key) return { error: "no GEMINI_API_KEY" };
+  const temp = (typeof temperature === "number" && temperature >= 0 && temperature <= 2) ? temperature : 0.7;
   const url = "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=" + encodeURIComponent(key);
   const r = await fetch(url, {
     method: "POST", headers: { "content-type": "application/json" },
     body: JSON.stringify({
       contents: [{ role: "user", parts: [{ text: prompt }] }],
-      generationConfig: { temperature: 0.7, maxOutputTokens: 2048, responseMimeType: "application/json", thinkingConfig: { thinkingBudget: 0 } },
+      generationConfig: { temperature: temp, maxOutputTokens: 2048, responseMimeType: "application/json", thinkingConfig: { thinkingBudget: 0 } },
     }),
   });
   const text = await r.text();
@@ -93,14 +96,15 @@ async function callFeedback(body) {
 }
 
 // ── Google TTS (Chirp 3: HD) ─────────────────────────────────
-const LANG = { ja: { code: "ja-JP", f: "Aoede", m: "Alnilam" }, ko: { code: "ko-KR", f: "Aoede", m: "Alnilam" } };
-const VPOOL = ["Aoede","Kore","Leda","Zephyr","Puck","Charon","Fenrir","Orus","Alnilam"];
+// 일본어가 가장 자연스러운 남/녀 보이스 1개씩으로 고정. random도 이 둘 중에서만 선택.
+// (Chirp3-HD 8개 기본 화자 중 가장 자연스럽다고 평가되는 Aoede(여)·Charon(남). 바꾸려면 f/m만 수정)
+const LANG = { ja: { code: "ja-JP", f: "Aoede", m: "Charon" }, ko: { code: "ko-KR", f: "Aoede", m: "Charon" } };
 function pickVoice(lang, gender, name) {
   const L = LANG[lang] || LANG.ja, prefix = L.code + "-Chirp3-HD-";
   if (name && /^[A-Za-z]+$/.test(name)) return prefix + name;
-  if (gender === "female") return prefix + L.f;
   if (gender === "male") return prefix + L.m;
-  return prefix + VPOOL[Math.floor(Math.random() * VPOOL.length)];
+  if (gender === "female") return prefix + L.f;
+  return prefix + (Math.random() < 0.5 ? L.f : L.m); // random: 지정된 남/녀 중에서만
 }
 async function callTts(body) {
   const key = process.env.GOOGLE_TTS_KEY;
@@ -145,7 +149,7 @@ module.exports = async (req, res) => {
     }
     if (body.type === "gemini") {
       if (bump(ipDay, "g:" + ip, DAY_WINDOW) > GEMINI_PER_DAY) { res.status(429).json({ error: "rate limit (gemini)" }); return; }
-      res.status(200).json(await callGemini(body.prompt)); return;
+      res.status(200).json(await callGemini(body.prompt, body.temperature)); return;
     }
     if (body.type === "feedback") {
       if (bump(ipDay, "fb:" + ip, DAY_WINDOW) > 50) { res.status(429).json({ error: "rate limit (feedback)" }); return; }
