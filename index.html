@@ -290,7 +290,7 @@ const DAILY_TOTAL = 30;        // 오늘의 학습 하루 총량(복습+신규) 
 const NEW_RATIO_MIN = 0.3;     // 신규 최소 비율(30%) — 복습이 쌓여도 신규 자리 보장
 
 // 앱 버전/배포일 (정식 배포 시 v1.0으로). 통계탭 하단 워터마크 표시.
-const APP_VERSION = "v1.0.6";
+const APP_VERSION = "v1.0.7";
 const APP_BUILD = "2026-07-02";
 const FEEDBACK_EMAIL = "micki.02@kakaopiccoma.com";
 const FEEDBACK_URL = "https://script.google.com/macros/s/AKfycbyCuoe-Oa7hpb4tKlkeyiG3LFVWaLMTZG9M5wUxChsFzI12kGQEaGLhdLyuuAoLhktc/exec"; // 제보 메일 발송용 GAS 웹앱
@@ -2438,11 +2438,7 @@ function DetailModal({ card, onClose, voiceRef, allCards, cards, decks, onToggle
     closedRef.current = true;
     setClosing(true);
     setDragY((d) => Math.max(d, 2000));
-    setTimeout(() => {
-      onClose();
-      // 오버레이가 사라진 뒤 헤더 위/아래가 다른 시점에 다시 그려지며 깜빡이는 iOS 문제 대응(안전망).
-      requestAnimationFrame(() => requestAnimationFrame(forceRepaint));
-    }, CLOSE_MS);
+    setTimeout(onClose, CLOSE_MS);
   };
   const onSheetTouchStart = (e) => {
     if (e.touches.length !== 1 || closing) return;
@@ -6207,7 +6203,7 @@ const WHATSNEW_KEY = "jp-vocab-whatsnew-seen";
 function loadWhatsNewSeen() { try { return localStorage.getItem(WHATSNEW_KEY); } catch (e) { return APP_VERSION; } }
 function saveWhatsNewSeen(v) { try { localStorage.setItem(WHATSNEW_KEY, v); } catch (e) {} }
 const WHATS_NEW = {
-  "v1.0.6": [
+  "v1.0.7": [
     "단어 상세 팝업을 아래로 스와이프하면 닫혀요.",
     "헤더 오른쪽 아이콘을 누르면 처음 사용법 안내를 언제든 다시 볼 수 있어요.",
     "목록 탭 '＋ 새 단어 등록'으로 사전에 없는 단어도 직접 추가할 수 있어요.",
@@ -6412,15 +6408,11 @@ function App() {
       </nav>
 
       {showGuide && (
-        <FirstRunGuide firstTime={!loadGuideSeen()}
-          onClose={() => { setShowGuide(false); requestAnimationFrame(() => requestAnimationFrame(forceRepaint)); }} />
+        <FirstRunGuide firstTime={!loadGuideSeen()} onClose={() => setShowGuide(false)} />
       )}
       {!showGuide && showWhatsNew && (
         <WhatsNewModal notes={WHATS_NEW[APP_VERSION]}
-          onClose={() => {
-            saveWhatsNewSeen(APP_VERSION); setShowWhatsNew(false);
-            requestAnimationFrame(() => requestAnimationFrame(forceRepaint));
-          }} />
+          onClose={() => { saveWhatsNewSeen(APP_VERSION); setShowWhatsNew(false); }} />
       )}
     </div>
   );
@@ -7329,7 +7321,7 @@ html, body { overscroll-behavior-x: none; overflow: hidden; }
 .onb-notes { display: grid; grid-template-columns: auto 1fr; column-gap: 7px; row-gap: 7px;
   margin: 7px 2px 0; }
 .onb-note { display: contents; font-size: 12.5px; color: rgba(0,0,0,.62); line-height: 1.28; word-break: keep-all; }
-.onb-note .badge-cat { grid-column: 1; align-self: start; margin-top: 1px; }
+.onb-note .badge-cat { grid-column: 1; justify-self: start; align-self: start; margin-top: 1px; }
 .onb-note > span { grid-column: 2; }
 .onb-start { width: 100%; height: 44px; margin-top: 14px; border: none; border-radius: 15px;
   background: #fff; color: var(--ink); font-size: 16px; font-weight: 800; cursor: pointer; }

@@ -1,8 +1,8 @@
 # ピッ!とVOCA — 작업 핸드오프
 
-> 마지막 업데이트: 2026-07-01  
-> 작업 브랜치: `main` (정식 배포)  
-> 현재 버전: `v1.0.6`
+> 마지막 업데이트: 2026-07-02  
+> 작업 브랜치: `claude/app-structure-handoff-53n20j` (프리뷰 전용 — main 미반영, 아래 "배포 현황" 참고)  
+> 현재 버전(이 브랜치): `v1.0.7`
 
 ---
 
@@ -182,13 +182,22 @@
 - ⚠️ 두 가지 다 iOS 실기기 미검증. 특히 닫힘 깜빡임은 이번이 2차 시도라 그래도 남아있으면 알려주세요 — 다음 후보는 오버레이를 별도 레이어로 완전히 분리하거나 `apple-mobile-web-app-status-bar-style: black-translucent` 검토.
 - APP_VERSION `v1.0.6` / APP_BUILD `2026-07-02`.
 
+> ⚠️ **v1.0.2~v1.0.6은 `git revert`로 `main`에서 롤백됨(2026-07-02)** — 실기기 검증 전 단계 작업이 계속 운영(Vercel 프로덕션 도메인)에 자동 반영되고 있었던 것을 뒤늦게 발견. 이후로는 검증 전 작업은 이 브랜치(프리뷰)에만 커밋하고, **명시적 요청이 있을 때만 `main`에 반영**하기로 함. 커밋 자체는 안 지워졌고 이 브랜치에 계속 남아있음.
+
+#### v1.0.7 — v1.0.6 회귀 수정(모달 열 때도 깜빡임) + 온보딩 뱃지 늘어남 수정
+
+- **모달을 열 때도 깜빡이는 회귀 발생 → v1.0.6의 `forceRepaint()` 추가분 되돌림**: `DetailModal`/`FirstRunGuide`/`WhatsNewModal` 닫기 완료 후 `requestAnimationFrame` 2프레임 뒤 `forceRepaint()`를 호출하도록 했었는데, 사용자가 모달을 닫고 바로 다음 모달을 여는 경우 그 지연된 repaint(강제 리플로우+opacity/display 토글)가 **다음 모달이 이미 열린 시점과 겹쳐 실행되며 "여는데도 깜빡인다"는 새 증상**을 만든 것으로 파악됨. 세 곳 모두 `forceRepaint()` 호출을 제거하고 원래의 단순한 `onClose()`만 남김 — 순정 닫힘 깜빡임 자체는 아직 미해결 상태로 되돌아감(다음 접근 필요).
+- **온보딩 카테고리 설명 정렬 수정 — 뱃지가 늘어나던 문제**: v1.0.6에서 CSS 그리드로 정렬할 때 `.onb-note .badge-cat`에 `justify-self`를 지정하지 않아 그리드 기본값(`stretch`)이 적용되어, 짧은 `ピッ` 뱃지가 `DAILY` 뱃지 폭까지 늘어나 버렸음(뱃지 크기 자체가 커짐 — 의도한 게 아님). `justify-self: start` 추가로 뱃지는 원래 크기 그대로 두고, 그 뒤에 남는 빈 칸(간격)만으로 텍스트 시작 위치를 맞추도록 수정.
+- APP_VERSION `v1.0.7` / APP_BUILD `2026-07-02`.
+
 ---
 
 ## 배포 현황
 
 | 환경 | URL | 상태 |
 |---|---|---|
-| 운영(Production) | pitto-voca.vercel.app | `main` 브랜치 기준, v1.0.6까지 반영 |
+| 운영(Production) | pitto-voca.vercel.app | `main` 브랜치, **v1.0.1로 고정**(v1.0.2~ 이후 작업은 검증 전까지 반영 안 함) |
+| 프리뷰(Preview) | `claude/app-structure-handoff-53n20j` 브랜치 Vercel 프리뷰 URL | v1.0.7 반영 |
 
 ---
 
