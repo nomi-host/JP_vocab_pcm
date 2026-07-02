@@ -6,7 +6,8 @@
 > 전제로 작성했습니다. 구조가 다르면 함수/CSS 클래스명을 기준으로 대응되는 위치를 찾아 적용하세요.
 >
 > 기준 커밋: `8de28af` (v0.2.8 + Wayne QA, 2026-07-01) — **1~8번 섹션은 f13ea73(v0.2.2) 기준으로
-> 작성된 이전 내용 그대로이며, 9~11번 섹션이 이번 갱신분입니다.**
+> 작성된 이전 내용 그대로이며, 9~11번 섹션이 그 뒤 갱신분입니다.**
+> **12번 섹션(모달 딤 그라데이션 + 팝업/모달 위치)은 v1.1.0(2026-07-02) 기준 추가분입니다.**
 
 ---
 
@@ -756,10 +757,12 @@ function forceRepaint() {
 }
 ```
 
-### ⚠️ 아직 실기기(iOS Safari) 완전 검증 안 됨
-4번(구조 변경)까지는 실기기에서 X버튼 버그와 잔상 버그 재현이 확인됐고(→ 섹션 9로 별도 원인이 밝혀짐),
-5번(스크롤 넛지 실효성 수정)은 **가설 단계**입니다. 이식 후 이 잔상 버그가 재현되면, 다음 후보를
-순서대로 시도해 보세요:
+### ✅ 실기기(iOS Safari) 검증 완료 (원본 앱, 2026-07-01)
+이 문서 작성 시점(v0.2.8)에는 5번(스크롤 넛지 실효성 수정)이 가설 단계였지만, 이후 `JP_vocab_pcm`(사내
+배포용) 쪽에서 X버튼 버그와 잔상 버그 **둘 다 실기기에서 해결 확인**됐습니다(추가 코드 변경 없이 위
+1~5번 조치로 해결). 이식 대상 앱에서도 같은 구조(스크롤 컨테이너 안 중첩 `position:fixed`, `.app`
+fixed 오버레이)였다면 위 조치를 그대로 옮기는 것으로 충분할 가능성이 높습니다. 그래도 재현되면 아래
+후보를 순서대로 시도해 보세요:
 - `apple-mobile-web-app-status-bar-style`을 `default`에서 `black-translucent`로 (단, **PWA 설치(standalone)
   모드에만 영향** — 일반 브라우저 탭에는 효과 없음)
 - 최후 수단: `location.reload()`를 온보딩 종료 시점에 되살리되, reload 직전 0.1초 페이드 처리로
@@ -815,6 +818,66 @@ function wordSpeech(card) {
 그대로 붙여넣으면 됩니다. **기존 키와 충돌 여부만 확인**하세요(이번 반영 시 충돌 0건이었음).
 개인 앱의 단어 데이터가 다르면, 겹치지 않는 단어의 override는 그냥 무해하게 무시됩니다(키가 없으면
 `wordSpeech`가 기본 로직으로 폴백).
+
+---
+
+## 12. 모달 딤(어두운 막) 그라데이션 + 팝업/모달 위치 — 상태바 경계선 제거
+
+### 무엇이 문제였나 (iOS standalone PWA 전용)
+모달/오버레이가 뜰 때 배경을 반투명 검정(`rgba(0,0,0,.35~.45)`)으로 덮는데, **홈 화면에 설치한 앱
+(standalone)** 에서는 상단 **상태바(시계·다이내믹아일랜드) 띠**가 웹 콘텐츠가 아니라 시스템이 따로
+그리는 영역이라, 본문만 어두워지고 상태바는 밝게 남아 **헤더 경계에 색이 갈라지는 선**이 보였다.
+(열고/닫을 때 상태바와 본문이 서로 다른 시점에 어두워졌다 밝아져 "깜빡이는" 것처럼도 보였다.)
+
+### 시도했다가 실패한 것들 (다시 하지 말 것)
+`<meta theme-color>`/`html`·`body` 배경을 딤 색과 동기화, 오버레이·헤더·탭바 GPU 레이어 승격
+(`translateZ`), `-webkit-overflow-scrolling:touch` 제거, `forceRepaint` 등 — **전부 실패하거나 탭바 색이
+물드는 새 부작용을 냈다.** standalone 상태바는 웹에서 색을 못 맞춘다는 게 결론.
+
+### 해결책 (오리지날 앱 방식이 정답) — **상단을 아예 딤하지 않는다**
+상태바를 어둡게 맞추려 하지 말고, **딤을 헤더 아래부터만** 주고 그 경계를 **그라데이션으로 흐린다.**
+
+1. **헤더 아래 y좌표를 CSS 변수로 노출** — `App`에서 `.topbar`의 화면상 아래 좌표를 측정:
+```javascript
+useEffect(() => {
+  const setVar = () => {
+    const tb = document.querySelector(".topbar");
+    document.documentElement.style.setProperty("--dim-top", (tb ? Math.round(tb.getBoundingClientRect().bottom) : 0) + "px");
+  };
+  setVar();
+  const t = setTimeout(setVar, 300);            // 폰트/레이아웃 안정화 후 재측정
+  window.addEventListener("resize", setVar);
+  window.addEventListener("orientationchange", setVar);
+  return () => { clearTimeout(t); window.removeEventListener("resize", setVar); window.removeEventListener("orientationchange", setVar); };
+}, [onboardDone, version]);
+```
+2. **오버레이 배경을 `--dim-top` 기준 그라데이션으로** — 헤더까지(0~--dim-top)는 완전 투명,
+   그 아래 ~200px에 걸쳐 원래 딤 농도에 도달. `inset:0`(전체화면)이라 카드 위치는 그대로:
+```css
+.kanji-modal-overlay {           /* 바텀시트(단어/한자 상세) */
+  position: fixed; inset: 0; z-index: 9999;
+  background: linear-gradient(to bottom,
+    rgba(0,0,0,0) var(--dim-top, 0px),
+    rgba(0,0,0,.45) calc(var(--dim-top, 0px) + 200px));
+  display: flex; align-items: flex-end; justify-content: center;
+}
+/* .guide-overlay(가이드/업데이트안내, 딤 .4), .fb-overlay(제보, .4)도 같은 형태로 통일 */
+```
+
+### 팝업/모달 위치 주의점 (실제로 겪은 함정)
+- **바텀시트(`.kanji-modal`)**: 높이를 `90dvh` 같은 고정값으로 두면 헤더 바로 아래까지 차올라 붙는다.
+  `height:auto; max-height:82dvh`로 두면 콘텐츠 높이만큼만, 헤더 아래 여백을 남기고 뜬다(팝업이 내려온 느낌).
+- **세로로 긴 중앙 정렬 모달**(예: 목록 단어 팝업 `WordDetailModal`, `.modal-overlay`): `inset:0`로 전체화면
+  중앙 정렬하면 **위로 올라가 헤더에 걸린다.** 이 종류만 오버레이에 `top: var(--dim-top)`를 줘서
+  **헤더 아래 영역에서 중앙 정렬**시킨다(그러면 딤 그라데이션은 `...0, .35 200px`처럼 overlay top에서
+  0으로 시작하는 형태로 두면 경계선은 여전히 없음).
+- **작은/전체화면 중앙 모달**(가이드·업데이트안내·제보): `inset:0` 그대로 두면 원래 위치(화면 중앙).
+- 정리: **바텀시트=`inset:0`+dim-top 그라데이션 / 긴 중앙모달=`top:--dim-top`+top0 그라데이션 / 작은 중앙모달=`inset:0`+dim-top 그라데이션.**
+
+### 스와이프로 닫기 애니메이션
+아래로 스와이프해 닫을 때 `translateY(2000px)`처럼 큰 값으로 순간이동시키면 초반이 너무 빨라 뚝 끊긴다.
+**`translateY(100%)`(자기 높이만큼, 딱 화면 밖까지)** + `320ms` + iOS 감속 이징 `cubic-bezier(.32,.72,0,1)`로
+하면 부드럽다. X버튼/오버레이 탭/Escape도 같은 닫힘 애니메이션(`closing` 상태)을 공유시킨다.
 
 ---
 
