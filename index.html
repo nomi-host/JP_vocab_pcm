@@ -290,7 +290,7 @@ const DAILY_TOTAL = 30;        // 오늘의 학습 하루 총량(복습+신규) 
 const NEW_RATIO_MIN = 0.3;     // 신규 최소 비율(30%) — 복습이 쌓여도 신규 자리 보장
 
 // 앱 버전/배포일 (정식 배포 시 v1.0으로). 통계탭 하단 워터마크 표시.
-const APP_VERSION = "v1.0.18";
+const APP_VERSION = "v1.0.19";
 const APP_BUILD = "2026-07-02";
 const FEEDBACK_EMAIL = "micki.02@kakaopiccoma.com";
 const FEEDBACK_URL = "https://script.google.com/macros/s/AKfycbyCuoe-Oa7hpb4tKlkeyiG3LFVWaLMTZG9M5wUxChsFzI12kGQEaGLhdLyuuAoLhktc/exec"; // 제보 메일 발송용 GAS 웹앱
@@ -6209,7 +6209,7 @@ const WHATSNEW_KEY = "jp-vocab-whatsnew-seen";
 function loadWhatsNewSeen() { try { return localStorage.getItem(WHATSNEW_KEY); } catch (e) { return APP_VERSION; } }
 function saveWhatsNewSeen(v) { try { localStorage.setItem(WHATSNEW_KEY, v); } catch (e) {} }
 const WHATS_NEW = {
-  "v1.0.18": [
+  "v1.0.19": [
     "단어 상세 팝업을 아래로 스와이프하면 닫혀요.",
     "헤더 오른쪽 아이콘을 누르면 처음 사용법 안내를 언제든 다시 볼 수 있어요.",
     "목록 탭 '＋ 새 단어 등록'으로 사전에 없는 단어도 직접 추가할 수 있어요.",
@@ -6289,6 +6289,21 @@ function App() {
   }, [onboard && onboard.done]);
 
   useEffect(() => { saveDecks(decks); }, [decks]);
+
+  // 모달 딤을 헤더 아래부터만 적용하기 위해, 헤더(.topbar) 아래 y좌표를 CSS 변수로 노출.
+  // (상태바+헤더는 딤하지 않아 상태바 색이 본문 딤과 어긋나 보이는 문제를 원천 차단 — 오리지날 앱 방식)
+  useEffect(() => {
+    const setVar = () => {
+      const tb = document.querySelector(".topbar");
+      const b = tb ? Math.round(tb.getBoundingClientRect().bottom) : 0;
+      document.documentElement.style.setProperty("--dim-top", b + "px");
+    };
+    setVar();
+    const t = setTimeout(setVar, 300); // 폰트/레이아웃 안정화 후 재측정
+    window.addEventListener("resize", setVar);
+    window.addEventListener("orientationchange", setVar);
+    return () => { clearTimeout(t); window.removeEventListener("resize", setVar); window.removeEventListener("orientationchange", setVar); };
+  }, [onboard && onboard.done, version]);
 
   // iOS 상태바(시계 영역)를 탭하면 OS가 window를 맨 위로 스크롤한다.
   // 이 앱은 내부 .scroll-area가 실제 스크롤러라, window가 0이 되는 순간을 감지해
@@ -6921,7 +6936,7 @@ html, body { overscroll-behavior-x: none; overflow: hidden; }
 .tag-done { background: var(--accent); color: var(--on-accent); }
 
 /* 상세 모달 */
-.modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,.35);
+.modal-overlay { position: fixed; inset: 0; top: var(--dim-top, 0px); background: rgba(0,0,0,.35);
   display: flex; align-items: center; justify-content: center; z-index: 50;
   padding: 16px; animation: fade .15s ease; }
 @keyframes fade { from { opacity: 0; } to { opacity: 1; } }
@@ -7141,7 +7156,7 @@ html, body { overscroll-behavior-x: none; overflow: hidden; }
 .feedback-box { margin-top: 14px; }
 .feedback-open { width: 100%; height: 46px; border-radius: 14px; border: 1px solid var(--line);
   background: var(--surface); color: var(--ink-2); font-size: 14px; font-weight: 700; cursor: pointer; }
-.fb-overlay { position: fixed; inset: 0; background: rgba(0,0,0,.4); z-index: 100;
+.fb-overlay { position: fixed; inset: 0; top: var(--dim-top, 0px); background: rgba(0,0,0,.4); z-index: 100;
   display: flex; align-items: center; justify-content: center; padding: 20px; }
 .fb-modal { width: 100%; max-width: 380px; background: var(--surface); border-radius: 18px; padding: 20px; }
 .fb-title { font-size: 17px; font-weight: 800; color: var(--ink); }
@@ -7163,10 +7178,12 @@ html, body { overscroll-behavior-x: none; overflow: hidden; }
   margin: 18px 0 6px; letter-spacing: .3px; }
 
 /* ===== 한자 상세 모달 ===== */
-.kanji-modal-overlay { position: fixed; inset: 0; z-index: 9999; background: rgba(0,0,0,.45);
+/* 딤을 헤더 아래(--dim-top)부터 시작 → 상태바+헤더는 딤 안 됨(상태바 색 불일치 원천 차단). */
+.kanji-modal-overlay { position: fixed; inset: 0; top: var(--dim-top, 0px); z-index: 9999; background: rgba(0,0,0,.45);
   display: flex; align-items: flex-end; justify-content: center;
   font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Hiragino Kaku Gothic ProN", "Noto Sans JP", system-ui, sans-serif; }
-.kanji-modal { width: 100%; max-width: 480px; height: 90vh; height: 90dvh; max-height: 90vh; max-height: 90dvh;
+/* 시트 높이는 딤 영역(헤더 아래)을 넘지 않도록 100%로 제한 — 헤더를 침범하지 않음. */
+.kanji-modal { width: 100%; max-width: 480px; height: auto; max-height: 100%;
   display: flex; flex-direction: column; overflow: hidden;
   background: var(--surface); border-radius: 22px 22px 0 0;
   box-shadow: 0 -8px 40px rgba(0,0,0,.18); animation: kmUp .26s cubic-bezier(.2,.8,.2,1); }
@@ -7371,7 +7388,7 @@ html, body { overscroll-behavior-x: none; overflow: hidden; }
 .install-share { display: inline-block; font-family: -apple-system, BlinkMacSystemFont, sans-serif; }
 
 /* 첫 사용자 가이드 */
-.guide-overlay { position: fixed; inset: 0; background: rgba(0,0,0,.4); z-index: 60;
+.guide-overlay { position: fixed; inset: 0; top: var(--dim-top, 0px); background: rgba(0,0,0,.4); z-index: 60;
   display: flex; align-items: center; justify-content: center; padding: 20px; animation: fade .15s ease; }
 .guide-modal { background: var(--surface); width: 100%; max-width: 380px; border-radius: 22px;
   padding: 0 22px 22px; max-height: calc(100dvh - 40px); overflow-y: auto;

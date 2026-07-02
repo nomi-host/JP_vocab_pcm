@@ -2,7 +2,7 @@
 
 > 마지막 업데이트: 2026-07-02  
 > 작업 브랜치: `claude/app-structure-handoff-53n20j` (프리뷰 전용 — main 미반영, 아래 "배포 현황" 참고)  
-> 현재 버전(이 브랜치): `v1.0.18`
+> 현재 버전(이 브랜치): `v1.0.19`
 
 ---
 
@@ -274,6 +274,16 @@
 - **조치**: 사용자 요청("그냥 롤백해")대로 `index.html`을 v1.0.15 시점으로 복원(`git checkout dfd65be -- index.html`). v1.0.16(WordDetailModal `showDetail`시 오버레이 투명)·v1.0.17(`useStatusBarDim`/`_sbStack` 및 6개 컴포넌트 호출) **전부 제거**. 모달/오버레이·앱셸은 다시 **production v1.0.1과 동일 동작**.
 - **최종 결론(상태바 딤/깜빡임)**: 이 환경에서 실기기 검증이 불가능해 코드 추론만으로는 이 iOS standalone 상태바 문제를 안전하게 못 잡음. theme-color/body-bg 조작은 탭바 등 다른 영역 부작용을 부르고, 색 매칭도 불안정. **더 이상 이 방향으로 시도하지 않음.** 상태바를 본문과 함께 딤하려면 `apple-mobile-web-app-status-bar-style: black-translucent`(평상시 상태바 글자 흰색 부작용) 트레이드오프뿐 — 사용자 결정 없이는 보류.
 - APP_VERSION `v1.0.18` / APP_BUILD `2026-07-02`.
+
+#### v1.0.19 — 딤을 헤더 아래부터만 적용(오리지날 앱 방식) — 상태바 불일치 원천 해결
+
+- **핵심 전환**: 사용자가 오리지날(개인) 앱을 보여줌 — 거기선 **헤더를 딤하지 않고 상태바와 같은 색으로 두고, 딤은 헤더 아래부터만** 적용해서 상태바 색 불일치 자체가 안 생김. 상태바를 억지로 어둡게 맞추려던 그동안의 방향이 틀렸고, **애초에 상단(상태바+헤더)을 안 건드리는 게 정답**.
+- **수정**:
+  - App에 `--dim-top` CSS 변수 추가 — `.topbar`의 화면상 아래 y좌표를 측정해 노출(마운트 시 + 300ms 재측정 + resize/orientation). deps `[onboard.done, version]`.
+  - 4개 오버레이(`.kanji-modal-overlay`·`.modal-overlay`·`.guide-overlay`·`.fb-overlay`)를 `inset:0` → `top: var(--dim-top, 0px)`로 바꿔 **딤이 헤더 아래에서 시작**. 상태바+헤더는 딤되지 않아 항상 밝게 유지 → 상태바 색 불일치/깜빡임이 구조적으로 사라짐(상태바를 만질 필요 없음).
+  - `.kanji-modal`(바텀시트) 높이를 `90dvh` → `height:auto; max-height:100%`로 바꿔 딤 영역(헤더 아래)을 넘지 않게 함(헤더 침범 방지). 콘텐츠가 짧으면 시트도 짧아 위쪽 딤 여백이 보이는 오리지날 느낌.
+- ⚠️ iOS 실기기 미검증. **모달 위치·높이(특히 바텀시트가 너무 짧거나/헤더에 붙는 느낌)는 실제로 보고 미세조정 필요** — `--dim-top` 측정값이나 `.kanji-modal` max-height만 손보면 됨.
+- APP_VERSION `v1.0.19` / APP_BUILD `2026-07-02`.
 
 ---
 
