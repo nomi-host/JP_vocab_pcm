@@ -2,7 +2,7 @@
 
 > 마지막 업데이트: 2026-07-02  
 > 작업 브랜치: `claude/app-structure-handoff-53n20j` (프리뷰 전용 — main 미반영, 아래 "배포 현황" 참고)  
-> 현재 버전(이 브랜치): `v1.0.17`
+> 현재 버전(이 브랜치): `v1.0.18`
 
 ---
 
@@ -267,6 +267,13 @@
   - 적용: `DetailModal`(.45 `#858588`), `WordDetailModal`·`DeckManager`(.35 `#9D9DA1`), `FirstRunGuide`·`WhatsNewModal`(guide .4 `#919194`), `FeedbackBox`(fb .4 `#919194`, open 동안).
 - ⚠️ iOS 실기기 미검증. 색 값이 실제 렌더와 미세하게 다르면 해당 상수만 조정하면 됨. 온보딩에서 동일 메커니즘이 동작함이 확인됐으므로 이번엔 맞을 가능성이 높음.
 - APP_VERSION `v1.0.17` / APP_BUILD `2026-07-02`.
+
+#### v1.0.18 — v1.0.16·v1.0.17 롤백(상태바/딤 실험 전면 철회)
+
+- **v1.0.17이 새 버그 유발**: theme-color와 함께 `html/body` 배경을 딤 색으로 바꾸니 그 배경이 **하단 탭바/safe-area 영역까지 물들여**, 목록 탭 등 여기저기서 "탭바 색이 달라지는" 버그가 생김. 또 v1.0.16(중첩 딤 투명화)도 실기기에서 기대대로 안 먹혔다고 보고됨("딤 고정도 안 된 것 같음").
+- **조치**: 사용자 요청("그냥 롤백해")대로 `index.html`을 v1.0.15 시점으로 복원(`git checkout dfd65be -- index.html`). v1.0.16(WordDetailModal `showDetail`시 오버레이 투명)·v1.0.17(`useStatusBarDim`/`_sbStack` 및 6개 컴포넌트 호출) **전부 제거**. 모달/오버레이·앱셸은 다시 **production v1.0.1과 동일 동작**.
+- **최종 결론(상태바 딤/깜빡임)**: 이 환경에서 실기기 검증이 불가능해 코드 추론만으로는 이 iOS standalone 상태바 문제를 안전하게 못 잡음. theme-color/body-bg 조작은 탭바 등 다른 영역 부작용을 부르고, 색 매칭도 불안정. **더 이상 이 방향으로 시도하지 않음.** 상태바를 본문과 함께 딤하려면 `apple-mobile-web-app-status-bar-style: black-translucent`(평상시 상태바 글자 흰색 부작용) 트레이드오프뿐 — 사용자 결정 없이는 보류.
+- APP_VERSION `v1.0.18` / APP_BUILD `2026-07-02`.
 
 ---
 
