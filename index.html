@@ -290,7 +290,7 @@ const DAILY_TOTAL = 30;        // 오늘의 학습 하루 총량(복습+신규) 
 const NEW_RATIO_MIN = 0.3;     // 신규 최소 비율(30%) — 복습이 쌓여도 신규 자리 보장
 
 // 앱 버전/배포일 (정식 배포 시 v1.0으로). 통계탭 하단 워터마크 표시.
-const APP_VERSION = "v1.0.5";
+const APP_VERSION = "v1.0.6";
 const APP_BUILD = "2026-07-02";
 const FEEDBACK_EMAIL = "micki.02@kakaopiccoma.com";
 const FEEDBACK_URL = "https://script.google.com/macros/s/AKfycbyCuoe-Oa7hpb4tKlkeyiG3LFVWaLMTZG9M5wUxChsFzI12kGQEaGLhdLyuuAoLhktc/exec"; // 제보 메일 발송용 GAS 웹앱
@@ -2438,7 +2438,11 @@ function DetailModal({ card, onClose, voiceRef, allCards, cards, decks, onToggle
     closedRef.current = true;
     setClosing(true);
     setDragY((d) => Math.max(d, 2000));
-    setTimeout(onClose, CLOSE_MS);
+    setTimeout(() => {
+      onClose();
+      // 오버레이가 사라진 뒤 헤더 위/아래가 다른 시점에 다시 그려지며 깜빡이는 iOS 문제 대응(안전망).
+      requestAnimationFrame(() => requestAnimationFrame(forceRepaint));
+    }, CLOSE_MS);
   };
   const onSheetTouchStart = (e) => {
     if (e.touches.length !== 1 || closing) return;
@@ -6038,17 +6042,21 @@ function OnboardingView({ onDone, initial }) {
             })()}
           </div>
         )}
-        {ratio && ratio.piccoma && (
-          <p className="onb-note">
-            <CategoryBadge category="piccoma" />
-            <span>픽코마 비즈니스 단어장이에요. 픽코마에서 자주 쓰는 업무·실무, 비즈니스 용어가 포함돼 있어요.</span>
-          </p>
-        )}
-        {ratio && ratio.daily && (
-          <p className="onb-note">
-            <CategoryBadge category="daily" />
-            <span>일상·신조어 표현이에요. 매일의 생활 회화에서 바로 쓰는 표현과 관용구, SNS 신조어를 담았어요.</span>
-          </p>
+        {ratio && (ratio.piccoma || ratio.daily) && (
+          <div className="onb-notes">
+            {ratio.piccoma && (
+              <p className="onb-note">
+                <CategoryBadge category="piccoma" />
+                <span>픽코마 비즈니스 단어장이에요. 픽코마에서 자주 쓰는 업무·실무, 비즈니스 용어가 포함돼 있어요.</span>
+              </p>
+            )}
+            {ratio.daily && (
+              <p className="onb-note">
+                <CategoryBadge category="daily" />
+                <span>일상·신조어 표현이에요. 매일의 생활 회화에서 바로 쓰는 표현과 관용구, SNS 신조어를 담았어요.</span>
+              </p>
+            )}
+          </div>
         )}
         <button className="onb-start" disabled={!sel} onClick={() => sel && onDone(sel)}>
           {initial ? "이 레벨로 변경" : "학습 시작하기"}
@@ -6199,7 +6207,7 @@ const WHATSNEW_KEY = "jp-vocab-whatsnew-seen";
 function loadWhatsNewSeen() { try { return localStorage.getItem(WHATSNEW_KEY); } catch (e) { return APP_VERSION; } }
 function saveWhatsNewSeen(v) { try { localStorage.setItem(WHATSNEW_KEY, v); } catch (e) {} }
 const WHATS_NEW = {
-  "v1.0.5": [
+  "v1.0.6": [
     "단어 상세 팝업을 아래로 스와이프하면 닫혀요.",
     "헤더 오른쪽 아이콘을 누르면 처음 사용법 안내를 언제든 다시 볼 수 있어요.",
     "목록 탭 '＋ 새 단어 등록'으로 사전에 없는 단어도 직접 추가할 수 있어요.",
@@ -6403,10 +6411,16 @@ function App() {
         </button>
       </nav>
 
-      {showGuide && <FirstRunGuide onClose={() => setShowGuide(false)} firstTime={!loadGuideSeen()} />}
+      {showGuide && (
+        <FirstRunGuide firstTime={!loadGuideSeen()}
+          onClose={() => { setShowGuide(false); requestAnimationFrame(() => requestAnimationFrame(forceRepaint)); }} />
+      )}
       {!showGuide && showWhatsNew && (
         <WhatsNewModal notes={WHATS_NEW[APP_VERSION]}
-          onClose={() => { saveWhatsNewSeen(APP_VERSION); setShowWhatsNew(false); }} />
+          onClose={() => {
+            saveWhatsNewSeen(APP_VERSION); setShowWhatsNew(false);
+            requestAnimationFrame(() => requestAnimationFrame(forceRepaint));
+          }} />
       )}
     </div>
   );
@@ -7310,9 +7324,13 @@ html, body { overscroll-behavior-x: none; overflow: hidden; }
 .onb-ratio-label { font-size: 12px; font-weight: 600; color: rgba(0,0,0,.6); }
 .onb-ratio-item { display: inline-flex; align-items: center; gap: 2.5px; } /* 뱃지↔퍼센트 간격: 기존 5px의 절반 */
 .onb-ratio .badge-cat { padding: 3px 7px; } /* N2처럼 그룹 많은 레벨도 한 줄에 들어오게 살짝 축소 */
-.onb-note { display: flex; align-items: flex-start; gap: 7px; margin: 7px 2px 0;
-  font-size: 12.5px; color: rgba(0,0,0,.62); line-height: 1.28; word-break: keep-all; }
-.onb-note .badge-cat { flex-shrink: 0; margin-top: 1px; }
+/* 뱃지 폭(ピッ vs DAILY)이 달라도 설명 시작 위치가 같도록, 그리드 첫 칸(뱃지)을 폭이 가장 넓은
+   뱃지에 맞춰 공유시킨다(피/데일리 두 줄이 서로 다른 <p>라도 같은 그리드 부모를 쓰면 칸 폭이 맞춰짐). */
+.onb-notes { display: grid; grid-template-columns: auto 1fr; column-gap: 7px; row-gap: 7px;
+  margin: 7px 2px 0; }
+.onb-note { display: contents; font-size: 12.5px; color: rgba(0,0,0,.62); line-height: 1.28; word-break: keep-all; }
+.onb-note .badge-cat { grid-column: 1; align-self: start; margin-top: 1px; }
+.onb-note > span { grid-column: 2; }
 .onb-start { width: 100%; height: 44px; margin-top: 14px; border: none; border-radius: 15px;
   background: #fff; color: var(--ink); font-size: 16px; font-weight: 800; cursor: pointer; }
 .onb-start:disabled { opacity: .45; cursor: default; }
