@@ -290,7 +290,7 @@ const DAILY_TOTAL = 30;        // 오늘의 학습 하루 총량(복습+신규) 
 const NEW_RATIO_MIN = 0.3;     // 신규 최소 비율(30%) — 복습이 쌓여도 신규 자리 보장
 
 // 앱 버전/배포일 (정식 배포 시 v1.0으로). 통계탭 하단 워터마크 표시.
-const APP_VERSION = "v1.0.22";
+const APP_VERSION = "v1.0.23";
 const APP_BUILD = "2026-07-02";
 const FEEDBACK_EMAIL = "micki.02@kakaopiccoma.com";
 const FEEDBACK_URL = "https://script.google.com/macros/s/AKfycbyCuoe-Oa7hpb4tKlkeyiG3LFVWaLMTZG9M5wUxChsFzI12kGQEaGLhdLyuuAoLhktc/exec"; // 제보 메일 발송용 GAS 웹앱
@@ -6208,7 +6208,7 @@ const WHATSNEW_KEY = "jp-vocab-whatsnew-seen";
 function loadWhatsNewSeen() { try { return localStorage.getItem(WHATSNEW_KEY); } catch (e) { return APP_VERSION; } }
 function saveWhatsNewSeen(v) { try { localStorage.setItem(WHATSNEW_KEY, v); } catch (e) {} }
 const WHATS_NEW = {
-  "v1.0.22": [
+  "v1.0.23": [
     "단어 상세 팝업을 아래로 스와이프하면 닫혀요.",
     "헤더 오른쪽 아이콘을 누르면 처음 사용법 안내를 언제든 다시 볼 수 있어요.",
     "목록 탭 '＋ 새 단어 등록'으로 사전에 없는 단어도 직접 추가할 수 있어요.",
@@ -6935,8 +6935,11 @@ html, body { overscroll-behavior-x: none; overflow: hidden; }
 .tag-done { background: var(--accent); color: var(--on-accent); }
 
 /* 상세 모달 */
-.modal-overlay { position: fixed; inset: 0;
-  background: linear-gradient(to bottom, rgba(0,0,0,0) var(--dim-top, 0px), rgba(0,0,0,.35) calc(var(--dim-top, 0px) + 200px));
+/* 목록 단어 팝업(WordDetailModal)은 세로로 길어 전체화면 중앙이면 헤더에 걸린다 →
+   top을 헤더 아래(--dim-top)로 내려 그 아래 영역에서 중앙 정렬. 딤은 overlay top(=헤더)에서
+   시작하는 그라데이션이라 경계선 없음. */
+.modal-overlay { position: fixed; inset: 0; top: var(--dim-top, 0px);
+  background: linear-gradient(to bottom, rgba(0,0,0,0) 0, rgba(0,0,0,.35) 200px);
   display: flex; align-items: center; justify-content: center; z-index: 50;
   padding: 16px; animation: fade .15s ease; }
 @keyframes fade { from { opacity: 0; } to { opacity: 1; } }
