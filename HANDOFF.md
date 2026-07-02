@@ -2,7 +2,7 @@
 
 > 마지막 업데이트: 2026-07-02  
 > 작업 브랜치: `claude/app-structure-handoff-53n20j` (프리뷰 전용 — main 미반영, 아래 "배포 현황" 참고)  
-> 현재 버전(이 브랜치): `v1.0.14`
+> 현재 버전(이 브랜치): `v1.0.15`
 
 ---
 
@@ -244,6 +244,13 @@
 - **수정**: `_applyOverlayTheme`에서 theme-color뿐 아니라 **`document.documentElement`/`document.body`의 배경색도 depth별 딤 색으로 함께 설정**(`_setRootBg`), 모달 다 닫히면 `""`로 복원. standalone에서 상태바 띠가 body 배경을 따라가면 이걸로 본문과 함께 어두워질 것.
 - ⚠️ iOS 실기기 미검증. 이걸로도 상태바 띠가 안 어두워지면, 그 띠는 body 배경이 아니라 **iOS 시스템 상태바(standalone `default` 스타일)**라는 뜻 → 그땐 정적 메타 `apple-mobile-web-app-status-bar-style` 조정밖엔 없고(단, `black`/`black-translucent`는 평상시 상태바 텍스트 색까지 바뀌어 밝은 앱 디자인과 상충하는 트레이드오프가 있음), 그 트레이드오프를 사용자와 상의해야 함.
 - APP_VERSION `v1.0.14` / APP_BUILD `2026-07-02`.
+
+#### v1.0.15 — 상태바 깜빡임/색불일치 대응 **전면 롤백**(v1.0.5~v1.0.14 시도 제거)
+
+- **결론**: v1.0.14(body 배경 딤)는 상태바를 오히려 반대로 너무 어둡게 만들어 헤더와 또 안 맞았고("더 꼬임"), Safari 탭에서도 동일. 근본 문제는 **상태바 띠(단색 표면)를 "반투명 딤이 여러 색 콘텐츠 위에 얹힌 결과"와 색으로 맞추는 것 자체가 원리상 불가능**하고, 매 모달마다 theme-color/배경을 토글한 것이 오히려 새 깜빡임을 유발한 것.
+- **롤백 내용**: v1.0.5~v1.0.14에서 깜빡임/상태바용으로 넣었던 것을 전부 제거 — theme-color 동기화·body/html 배경 딤(`useOverlayTheme`/`pushOverlayTheme` 등 헬퍼 및 6개 컴포넌트 호출), 오버레이 `will-change:opacity`+`translateZ` GPU 승격(4개 오버레이), `.scroll-area`의 `-webkit-overflow-scrolling:touch` 제거를 원복(다시 추가). → 모달/오버레이·앱셸이 **production v1.0.1과 동일한 동작**으로 복귀. (단, 스와이프로 닫기(v1.0.4)와 그 외 기능 변경들은 유지.)
+- **미해결로 남김**: 상태바 깜빡임/딤 동기화는 이 환경에서 실기기 재현·검증이 불가능해 코드 추론만으로는 해결하지 못함. standalone PWA에서 상태바를 본문과 함께 딤하려면 사실상 `apple-mobile-web-app-status-bar-style`을 `black-translucent`로 바꾸는 정도인데, 이는 **평상시(모달 없을 때)도 상태바 글자색이 흰색이 되어** 밝은 앱 디자인과 충돌하는 트레이드오프가 있음 → 사용자 결정 필요. 우선은 상태바를 건드리지 않는(자연 상태) 안정 버전으로 되돌려 둠.
+- APP_VERSION `v1.0.15` / APP_BUILD `2026-07-02`.
 
 ---
 

@@ -290,7 +290,7 @@ const DAILY_TOTAL = 30;        // 오늘의 학습 하루 총량(복습+신규) 
 const NEW_RATIO_MIN = 0.3;     // 신규 최소 비율(30%) — 복습이 쌓여도 신규 자리 보장
 
 // 앱 버전/배포일 (정식 배포 시 v1.0으로). 통계탭 하단 워터마크 표시.
-const APP_VERSION = "v1.0.14";
+const APP_VERSION = "v1.0.15";
 const APP_BUILD = "2026-07-02";
 const FEEDBACK_EMAIL = "micki.02@kakaopiccoma.com";
 const FEEDBACK_URL = "https://script.google.com/macros/s/AKfycbyCuoe-Oa7hpb4tKlkeyiG3LFVWaLMTZG9M5wUxChsFzI12kGQEaGLhdLyuuAoLhktc/exec"; // 제보 메일 발송용 GAS 웹앱
@@ -2377,7 +2377,6 @@ function FuriganaText({ tokens, showFuri }) {
    1) 단어 상세: 단어+읽기+뜻+품사+예문 + (한자어면) 한자 카드 목록 + 네이버/사전 링크
    2) 한자 상세: 한자 카드를 누르면 그 한자의 음훈독·부수·획수·뜻·활용단어 표시 */
 function DetailModal({ card, onClose, voiceRef, allCards, cards, decks, onToggleStar, onTogglePriority, onToggleDeck, onCreateDeck }) {
-  useOverlayTheme(); // 모달 열려있는 동안 상태바(theme-color)도 본문과 함께 딤
   // 방문 기록 스택: 각 항목 { kind:"word"|"kanji", card?, kanji? }
   const [stack, setStack] = useState([{ kind: "word", card }]);
   const [showDeckPicker, setShowDeckPicker] = useState(false); // '단어장에 담기' 버튼 눌렀을 때만 목록 노출
@@ -4386,7 +4385,6 @@ function statusKind(c) {
 }
 
 function WordDetailModal({ card, onClose, onSuspend, onUnsuspend, onSave, onDelete, voiceRef, decks, onToggleDeck, onCreateDeck, onToggleStar, onTogglePriority, allCards }) {
-  useOverlayTheme();
   const [editing, setEditing] = useState(false);
   const [form, setForm] = useState(null);
   const [showDetail, setShowDetail] = useState(false); // 한자/단어 상세(DetailModal)
@@ -4943,7 +4941,6 @@ function FilterBar({ flt, setFlt, deckFlt, setDeckFlt, posFlt, setPosFlt, catFlt
 
 /* 단어장 관리 모달: 생성·이름변경·삭제 */
 function DeckManager({ decks, cards, onClose, onCreate, onRename, onDelete }) {
-  useOverlayTheme();
   const [newName, setNewName] = useState("");
   const countFor = (id) => cards.filter((c) => (c.decks || []).includes(id)).length;
   return ReactDOM.createPortal(
@@ -5356,8 +5353,6 @@ function FeedbackBox() {
   const [name, setName] = useState("");
   const [text, setText] = useState("");
   const [status, setStatus] = useState(""); // "" | sending | ok | fail
-  // 제보 오버레이는 open일 때만 렌더되므로 open 동안만 상태바 딤 유지
-  useEffect(() => { if (!open) return; pushOverlayTheme(); return () => popOverlayTheme(); }, [open]);
   const send = async () => {
     if (!text.trim() || status === "sending") return;
     setStatus("sending");
@@ -6119,38 +6114,6 @@ function forceRepaint() {
   } catch (e) {}
 }
 
-/* iOS 상태바(시계·다이내믹아일랜드) 영역은 webview 콘텐츠가 아니라 시스템이 <meta theme-color>로
-   따로 칠한다. 그래서 모달 오버레이가 본문을 딤해도 상태바 띠는 theme-color(밝은색) 그대로 남아,
-   본문과 다른 시점에 어두워졌다/밝아지며 깜빡이는 것처럼 보였다.
-   모달이 열려있는 동안 theme-color를 딤 색과 같은 값으로 바꿔, 상태바 띠도 본문과 함께 어두워지게 한다.
-   여러 오버레이가 겹쳐도 되도록 depth 카운트로 관리(마지막 하나 닫힐 때만 원복).
-   ※ 목록>단어상세>상세처럼 모달이 겹치면 딤이 두 겹 쌓여 본문이 더 어두워지므로, theme-color도
-     depth에 맞춰 더 어둡게 맞춘다(안 그러면 상태바만 밝게 떠 색이 달라 보임). */
-const BASE_THEME = "#f2f2f7";
-// depth 1: 딤 한 겹(≈ .45 over #f2f2f7), depth 2: 두 겹(.35 후 .45), depth 3+: 더 어둡게.
-const OVERLAY_DIM_THEMES = ["#86868a", "#565659", "#3a3a3c"];
-let _overlayThemeDepth = 0;
-function _setTheme(color) {
-  try { const m = document.querySelector('meta[name="theme-color"]'); if (m) m.setAttribute("content", color); } catch (e) {}
-}
-// 상태바 띠가 (theme-color가 아니라) html/body 배경이 비쳐 보이는 경우도 있어, 배경도 함께 딤한다.
-function _setRootBg(color) {
-  try { document.documentElement.style.background = color; document.body.style.background = color; } catch (e) {}
-}
-function _applyOverlayTheme() {
-  if (_overlayThemeDepth <= 0) { _setTheme(BASE_THEME); _setRootBg(""); return; }
-  const c = OVERLAY_DIM_THEMES[Math.min(_overlayThemeDepth, OVERLAY_DIM_THEMES.length) - 1];
-  _setTheme(c); _setRootBg(c);
-}
-function pushOverlayTheme() { _overlayThemeDepth++; _applyOverlayTheme(); }
-function popOverlayTheme() {
-  _overlayThemeDepth = Math.max(0, _overlayThemeDepth - 1);
-  _applyOverlayTheme();
-}
-/* 오버레이 컴포넌트가 마운트~언마운트 동안 상태바 딤을 유지하도록 하는 훅 */
-function useOverlayTheme() {
-  useEffect(() => { pushOverlayTheme(); return () => popOverlayTheme(); }, []);
-}
 function InstallBanner() {
   const [show, setShow] = useState(false);
   const [iosHelp, setIosHelp] = useState(false);
@@ -6213,7 +6176,6 @@ const GUIDE_STEPS = [
   { icon: Icon.AddCircle, title: "없는 단어는 직접 등록", desc: "목록 탭의 '＋ 새 단어 등록'에서 사전에 없는 단어도 직접 추가할 수 있어요." },
 ];
 function FirstRunGuide({ onClose, firstTime }) {
-  useOverlayTheme();
   const finish = () => { try { localStorage.setItem(GUIDE_KEY, "1"); } catch (e) {} onClose(); };
   return (
     <div className="guide-overlay" onClick={finish}>
@@ -6247,14 +6209,13 @@ const WHATSNEW_KEY = "jp-vocab-whatsnew-seen";
 function loadWhatsNewSeen() { try { return localStorage.getItem(WHATSNEW_KEY); } catch (e) { return APP_VERSION; } }
 function saveWhatsNewSeen(v) { try { localStorage.setItem(WHATSNEW_KEY, v); } catch (e) {} }
 const WHATS_NEW = {
-  "v1.0.14": [
+  "v1.0.15": [
     "단어 상세 팝업을 아래로 스와이프하면 닫혀요.",
     "헤더 오른쪽 아이콘을 누르면 처음 사용법 안내를 언제든 다시 볼 수 있어요.",
     "목록 탭 '＋ 새 단어 등록'으로 사전에 없는 단어도 직접 추가할 수 있어요.",
   ],
 };
 function WhatsNewModal({ notes, onClose }) {
-  useOverlayTheme();
   return ReactDOM.createPortal(
     <div className="guide-overlay" onClick={onClose}>
       <div className="guide-modal whatsnew-modal" onClick={(e) => e.stopPropagation()}>
@@ -6497,11 +6458,6 @@ html, body { overscroll-behavior-x: none; overflow: hidden; }
   background: var(--bg); color: var(--ink);
   overflow: hidden;
 }
-/* iOS 깜빡임 대응(단일 배경 레이어 전략): 예전엔 .scroll-area의 -webkit-overflow-scrolling:touch가
-   별도 합성 레이어를 만들고, .topbar/.tabbar는 또 다른 레이어라, 반투명 오버레이가 나타났다 사라질 때
-   레이어들이 서로 다른 시점에 재합성되며 헤더 경계에서 깜빡였다. GPU 승격(translateZ)으로 맞추는
-   시도는 실패. 반대로, 배경을 전부 하나의 루트 레이어로 두면(별도 레이어 제거) 오버레이(자체 레이어)가
-   그 위에서 페이드될 때 배경은 다시 그려질 필요가 없어 영역별 타이밍 차이가 사라진다. */
 .topbar { padding: 14px 16px 10px; background: var(--bg); }
 .topbar-inner { max-width: 480px; margin: 0 auto; display: flex;
   align-items: center; justify-content: space-between; }
@@ -6510,9 +6466,7 @@ html, body { overscroll-behavior-x: none; overflow: hidden; }
   display: block; -webkit-tap-highlight-color: transparent; }
 .topbar-icon { height: 37px; width: auto; display: block; }
 
-/* -webkit-overflow-scrolling:touch 제거 — 모던 iOS(13+)는 이거 없이도 관성 스크롤이 부드럽고,
-   이 속성이 만드는 별도 스크롤 합성 레이어가 위 깜빡임(및 예전 X버튼 버그)의 핵심 원인이었다. */
-.scroll-area { flex: 1; overflow-y: auto; background: var(--bg); }
+.scroll-area { flex: 1; overflow-y: auto; -webkit-overflow-scrolling: touch; }
 .content { padding: 8px 16px 28px; }
 
 .ptr { display: flex; align-items: center; justify-content: center; gap: 8px;
@@ -6969,8 +6923,7 @@ html, body { overscroll-behavior-x: none; overflow: hidden; }
 /* 상세 모달 */
 .modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,.35);
   display: flex; align-items: center; justify-content: center; z-index: 50;
-  padding: 16px; animation: fade .15s ease;
-  will-change: opacity; transform: translateZ(0); -webkit-transform: translateZ(0); }
+  padding: 16px; animation: fade .15s ease; }
 @keyframes fade { from { opacity: 0; } to { opacity: 1; } }
 .modal { background: var(--surface); width: 100%; max-width: 440px;
   border-radius: 22px; padding: 0 18px 18px;
@@ -7189,8 +7142,7 @@ html, body { overscroll-behavior-x: none; overflow: hidden; }
 .feedback-open { width: 100%; height: 46px; border-radius: 14px; border: 1px solid var(--line);
   background: var(--surface); color: var(--ink-2); font-size: 14px; font-weight: 700; cursor: pointer; }
 .fb-overlay { position: fixed; inset: 0; background: rgba(0,0,0,.4); z-index: 100;
-  display: flex; align-items: center; justify-content: center; padding: 20px; animation: fade .15s ease;
-  will-change: opacity; transform: translateZ(0); -webkit-transform: translateZ(0); }
+  display: flex; align-items: center; justify-content: center; padding: 20px; }
 .fb-modal { width: 100%; max-width: 380px; background: var(--surface); border-radius: 18px; padding: 20px; }
 .fb-title { font-size: 17px; font-weight: 800; color: var(--ink); }
 .fb-sub { font-size: 12.5px; color: var(--muted); margin: 6px 0 12px; line-height: 1.5; word-break: keep-all; }
@@ -7211,11 +7163,8 @@ html, body { overscroll-behavior-x: none; overflow: hidden; }
   margin: 18px 0 6px; letter-spacing: .3px; }
 
 /* ===== 한자 상세 모달 ===== */
-/* will-change:opacity + translateZ로 오버레이를 자체 GPU 레이어로 승격 → opacity 페이드가 컴포지터
-   한 곳에서 전체적으로 처리되어, 어두워짐/밝아짐이 헤더 위/아래에서 따로 노는 깜빡임을 없앤다. */
 .kanji-modal-overlay { position: fixed; inset: 0; z-index: 9999; background: rgba(0,0,0,.45);
   display: flex; align-items: flex-end; justify-content: center;
-  will-change: opacity; transform: translateZ(0); -webkit-transform: translateZ(0);
   font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Hiragino Kaku Gothic ProN", "Noto Sans JP", system-ui, sans-serif; }
 .kanji-modal { width: 100%; max-width: 480px; height: 90vh; height: 90dvh; max-height: 90vh; max-height: 90dvh;
   display: flex; flex-direction: column; overflow: hidden;
@@ -7423,8 +7372,7 @@ html, body { overscroll-behavior-x: none; overflow: hidden; }
 
 /* 첫 사용자 가이드 */
 .guide-overlay { position: fixed; inset: 0; background: rgba(0,0,0,.4); z-index: 60;
-  display: flex; align-items: center; justify-content: center; padding: 20px; animation: fade .15s ease;
-  will-change: opacity; transform: translateZ(0); -webkit-transform: translateZ(0); }
+  display: flex; align-items: center; justify-content: center; padding: 20px; animation: fade .15s ease; }
 .guide-modal { background: var(--surface); width: 100%; max-width: 380px; border-radius: 22px;
   padding: 0 22px 22px; max-height: calc(100dvh - 40px); overflow-y: auto;
   animation: pop .22s cubic-bezier(.2,.8,.2,1); text-align: center; }
