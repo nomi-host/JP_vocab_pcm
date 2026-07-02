@@ -290,7 +290,7 @@ const DAILY_TOTAL = 30;        // 오늘의 학습 하루 총량(복습+신규) 
 const NEW_RATIO_MIN = 0.3;     // 신규 최소 비율(30%) — 복습이 쌓여도 신규 자리 보장
 
 // 앱 버전/배포일 (정식 배포 시 v1.0으로). 통계탭 하단 워터마크 표시.
-const APP_VERSION = "v1.0.15";
+const APP_VERSION = "v1.0.16";
 const APP_BUILD = "2026-07-02";
 const FEEDBACK_EMAIL = "micki.02@kakaopiccoma.com";
 const FEEDBACK_URL = "https://script.google.com/macros/s/AKfycbyCuoe-Oa7hpb4tKlkeyiG3LFVWaLMTZG9M5wUxChsFzI12kGQEaGLhdLyuuAoLhktc/exec"; // 제보 메일 발송용 GAS 웹앱
@@ -4439,7 +4439,10 @@ function WordDetailModal({ card, onClose, onSuspend, onUnsuspend, onSave, onDele
   };
 
   return ReactDOM.createPortal(
-    <div className="modal-overlay wd-overlay-pad" onClick={onClose}>
+    // 상세(DetailModal)가 위에 뜨면 이 오버레이의 딤을 투명하게 해, 딤이 두 겹 겹쳐 더 어두워지는 것 방지
+    // (위 DetailModal의 딤 한 겹만 보이게 → 상태바와의 색 차이도 완화).
+    <div className="modal-overlay wd-overlay-pad" onClick={onClose}
+      style={showDetail ? { background: "transparent" } : undefined}>
       <div className="modal wd-modal-cap" onClick={(e) => e.stopPropagation()}>
         <div className="modal-head">
           <span className={"tag " + statusLabel(card).cls}>{statusLabel(card).text}</span>
@@ -6209,7 +6212,7 @@ const WHATSNEW_KEY = "jp-vocab-whatsnew-seen";
 function loadWhatsNewSeen() { try { return localStorage.getItem(WHATSNEW_KEY); } catch (e) { return APP_VERSION; } }
 function saveWhatsNewSeen(v) { try { localStorage.setItem(WHATSNEW_KEY, v); } catch (e) {} }
 const WHATS_NEW = {
-  "v1.0.15": [
+  "v1.0.16": [
     "단어 상세 팝업을 아래로 스와이프하면 닫혀요.",
     "헤더 오른쪽 아이콘을 누르면 처음 사용법 안내를 언제든 다시 볼 수 있어요.",
     "목록 탭 '＋ 새 단어 등록'으로 사전에 없는 단어도 직접 추가할 수 있어요.",

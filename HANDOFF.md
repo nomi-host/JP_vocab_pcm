@@ -2,7 +2,7 @@
 
 > 마지막 업데이트: 2026-07-02  
 > 작업 브랜치: `claude/app-structure-handoff-53n20j` (프리뷰 전용 — main 미반영, 아래 "배포 현황" 참고)  
-> 현재 버전(이 브랜치): `v1.0.15`
+> 현재 버전(이 브랜치): `v1.0.16`
 
 ---
 
@@ -251,6 +251,13 @@
 - **롤백 내용**: v1.0.5~v1.0.14에서 깜빡임/상태바용으로 넣었던 것을 전부 제거 — theme-color 동기화·body/html 배경 딤(`useOverlayTheme`/`pushOverlayTheme` 등 헬퍼 및 6개 컴포넌트 호출), 오버레이 `will-change:opacity`+`translateZ` GPU 승격(4개 오버레이), `.scroll-area`의 `-webkit-overflow-scrolling:touch` 제거를 원복(다시 추가). → 모달/오버레이·앱셸이 **production v1.0.1과 동일한 동작**으로 복귀. (단, 스와이프로 닫기(v1.0.4)와 그 외 기능 변경들은 유지.)
 - **미해결로 남김**: 상태바 깜빡임/딤 동기화는 이 환경에서 실기기 재현·검증이 불가능해 코드 추론만으로는 해결하지 못함. standalone PWA에서 상태바를 본문과 함께 딤하려면 사실상 `apple-mobile-web-app-status-bar-style`을 `black-translucent`로 바꾸는 정도인데, 이는 **평상시(모달 없을 때)도 상태바 글자색이 흰색이 되어** 밝은 앱 디자인과 충돌하는 트레이드오프가 있음 → 사용자 결정 필요. 우선은 상태바를 건드리지 않는(자연 상태) 안정 버전으로 되돌려 둠.
 - APP_VERSION `v1.0.15` / APP_BUILD `2026-07-02`.
+
+#### v1.0.16 — 중첩 모달 딤 두 겹 방지(목록>단어상세>상세)
+
+- **문제**: 목록>단어상세(`WordDetailModal`, 딤 .35)>상세(`DetailModal`, 딤 .45)로 열면 오버레이 딤이 **두 겹** 쌓여 본문이 더 어두워지고, 그만큼 (딤 안 되는) 상태바와의 밝기 차이가 더 벌어져 "상태바만 밝은색" 불일치가 심해짐.
+- **수정**: `WordDetailModal`에서 자식 `DetailModal`이 열린 상태(`showDetail`)면 자기 `.modal-overlay` 배경을 `transparent`로 만들어, 위의 `DetailModal` 딤 한 겹만 보이게 함(딤 겹침 제거 → 본문이 덜 어두워지고 상태바 색 차이도 완화). `DetailModal`이 전체를 덮으므로 `WordDetailModal` 패널도 그 한 겹 딤 안에 자연스럽게 들어감.
+- (상태바 자체를 본문과 함께 딤하는 근본 해결은 여전히 `black-translucent` 트레이드오프 결정 대기 중 — v1.0.15 참고.)
+- APP_VERSION `v1.0.16` / APP_BUILD `2026-07-02`.
 
 ---
 
