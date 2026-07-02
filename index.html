@@ -290,7 +290,7 @@ const DAILY_TOTAL = 30;        // 오늘의 학습 하루 총량(복습+신규) 
 const NEW_RATIO_MIN = 0.3;     // 신규 최소 비율(30%) — 복습이 쌓여도 신규 자리 보장
 
 // 앱 버전/배포일 (정식 배포 시 v1.0으로). 통계탭 하단 워터마크 표시.
-const APP_VERSION = "v1.0.13";
+const APP_VERSION = "v1.0.14";
 const APP_BUILD = "2026-07-02";
 const FEEDBACK_EMAIL = "micki.02@kakaopiccoma.com";
 const FEEDBACK_URL = "https://script.google.com/macros/s/AKfycbyCuoe-Oa7hpb4tKlkeyiG3LFVWaLMTZG9M5wUxChsFzI12kGQEaGLhdLyuuAoLhktc/exec"; // 제보 메일 발송용 GAS 웹앱
@@ -6133,9 +6133,14 @@ let _overlayThemeDepth = 0;
 function _setTheme(color) {
   try { const m = document.querySelector('meta[name="theme-color"]'); if (m) m.setAttribute("content", color); } catch (e) {}
 }
+// 상태바 띠가 (theme-color가 아니라) html/body 배경이 비쳐 보이는 경우도 있어, 배경도 함께 딤한다.
+function _setRootBg(color) {
+  try { document.documentElement.style.background = color; document.body.style.background = color; } catch (e) {}
+}
 function _applyOverlayTheme() {
-  if (_overlayThemeDepth <= 0) { _setTheme(BASE_THEME); return; }
-  _setTheme(OVERLAY_DIM_THEMES[Math.min(_overlayThemeDepth, OVERLAY_DIM_THEMES.length) - 1]);
+  if (_overlayThemeDepth <= 0) { _setTheme(BASE_THEME); _setRootBg(""); return; }
+  const c = OVERLAY_DIM_THEMES[Math.min(_overlayThemeDepth, OVERLAY_DIM_THEMES.length) - 1];
+  _setTheme(c); _setRootBg(c);
 }
 function pushOverlayTheme() { _overlayThemeDepth++; _applyOverlayTheme(); }
 function popOverlayTheme() {
@@ -6242,7 +6247,7 @@ const WHATSNEW_KEY = "jp-vocab-whatsnew-seen";
 function loadWhatsNewSeen() { try { return localStorage.getItem(WHATSNEW_KEY); } catch (e) { return APP_VERSION; } }
 function saveWhatsNewSeen(v) { try { localStorage.setItem(WHATSNEW_KEY, v); } catch (e) {} }
 const WHATS_NEW = {
-  "v1.0.13": [
+  "v1.0.14": [
     "단어 상세 팝업을 아래로 스와이프하면 닫혀요.",
     "헤더 오른쪽 아이콘을 누르면 처음 사용법 안내를 언제든 다시 볼 수 있어요.",
     "목록 탭 '＋ 새 단어 등록'으로 사전에 없는 단어도 직접 추가할 수 있어요.",

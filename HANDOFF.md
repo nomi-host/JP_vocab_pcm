@@ -2,7 +2,7 @@
 
 > 마지막 업데이트: 2026-07-02  
 > 작업 브랜치: `claude/app-structure-handoff-53n20j` (프리뷰 전용 — main 미반영, 아래 "배포 현황" 참고)  
-> 현재 버전(이 브랜치): `v1.0.13`
+> 현재 버전(이 브랜치): `v1.0.14`
 
 ---
 
@@ -236,6 +236,14 @@
 - **수정**: theme-color를 **오버레이 depth에 맞춰 더 어둡게** 단계별로 적용. `OVERLAY_DIM_THEMES = ["#86868a"(1겹), "#565659"(2겹: .35→.45 계산값), "#3a3a3c"(3겹+)]`. push/pop 시 현재 depth에 맞는 색으로 재적용(닫으면 얕은 depth 색으로 되돌아가고, 0이면 base 복원).
 - ⚠️ iOS 실기기 미검증(샌드박스에서 재현 불가). depth-2 색은 실제 두 오버레이 알파 합성 계산값이라 대략 맞을 것.
 - APP_VERSION `v1.0.13` / APP_BUILD `2026-07-02`.
+
+#### v1.0.14 — 실행 환경이 standalone PWA임을 확인 → 상태바 띠 = body/html 배경으로 판단, 배경도 함께 딤
+
+- **핵심 확인**: 사용자가 **홈화면 설치 앱(standalone PWA)**에서 테스트 중임을 확인. standalone에선 상태바가 `theme-color`를 **무시**하는 경우가 많아 v1.0.12/13의 theme-color 동기화가 상태바 띠에 잘 안 먹혔던 것.
+- **이미지 분석(IMG_1513)**: 상태바 띠(시계·아일랜드)가 그 아래 딤된 헤더보다 **더 밝은 회색** = 그 띠는 "딤된 웹 콘텐츠"가 아니라 그 뒤의 **`html`/`body` 배경(#f2f2f7, 밝음)이 비쳐 보이는 표면**. 그래서 오버레이(웹 콘텐츠 위 딤)로는 그 띠가 안 어두워졌던 것.
+- **수정**: `_applyOverlayTheme`에서 theme-color뿐 아니라 **`document.documentElement`/`document.body`의 배경색도 depth별 딤 색으로 함께 설정**(`_setRootBg`), 모달 다 닫히면 `""`로 복원. standalone에서 상태바 띠가 body 배경을 따라가면 이걸로 본문과 함께 어두워질 것.
+- ⚠️ iOS 실기기 미검증. 이걸로도 상태바 띠가 안 어두워지면, 그 띠는 body 배경이 아니라 **iOS 시스템 상태바(standalone `default` 스타일)**라는 뜻 → 그땐 정적 메타 `apple-mobile-web-app-status-bar-style` 조정밖엔 없고(단, `black`/`black-translucent`는 평상시 상태바 텍스트 색까지 바뀌어 밝은 앱 디자인과 상충하는 트레이드오프가 있음), 그 트레이드오프를 사용자와 상의해야 함.
+- APP_VERSION `v1.0.14` / APP_BUILD `2026-07-02`.
 
 ---
 
