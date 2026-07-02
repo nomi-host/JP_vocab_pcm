@@ -290,8 +290,8 @@ const DAILY_TOTAL = 30;        // 오늘의 학습 하루 총량(복습+신규) 
 const NEW_RATIO_MIN = 0.3;     // 신규 최소 비율(30%) — 복습이 쌓여도 신규 자리 보장
 
 // 앱 버전/배포일 (정식 배포 시 v1.0으로). 통계탭 하단 워터마크 표시.
-const APP_VERSION = "v1.0.2";
-const APP_BUILD = "2026-07-01";
+const APP_VERSION = "v1.0.3";
+const APP_BUILD = "2026-07-02";
 const FEEDBACK_EMAIL = "micki.02@kakaopiccoma.com";
 const FEEDBACK_URL = "https://script.google.com/macros/s/AKfycbyCuoe-Oa7hpb4tKlkeyiG3LFVWaLMTZG9M5wUxChsFzI12kGQEaGLhdLyuuAoLhktc/exec"; // 제보 메일 발송용 GAS 웹앱
 
@@ -6175,6 +6175,35 @@ function FirstRunGuide({ onClose }) {
   );
 }
 
+/* ===================== 업데이트 안내(What's New) =====================
+   버전이 바뀔 때마다 한 번만 뜨는 요약 팝업. 신규 사용자(이번 세션에 막 온보딩을 마친 경우)에게는
+   띄우지 않는다 — 이미 온보딩+첫 사용자 가이드로 충분히 안내받았기 때문. 새 버전 배포 시
+   WHATS_NEW에 APP_VERSION 키로 항목만 추가하면 된다(내용 없으면 팝업 없이 조용히 버전만 기록). */
+const WHATSNEW_KEY = "jp-vocab-whatsnew-seen";
+function loadWhatsNewSeen() { try { return localStorage.getItem(WHATSNEW_KEY); } catch (e) { return APP_VERSION; } }
+function saveWhatsNewSeen(v) { try { localStorage.setItem(WHATSNEW_KEY, v); } catch (e) {} }
+const WHATS_NEW = {
+  "v1.0.3": [
+    "단어 상세 팝업을 아래로 스와이프하면 닫혀요.",
+    "헤더 오른쪽 아이콘을 누르면 처음 사용법 안내를 언제든 다시 볼 수 있어요.",
+    "목록 탭 '＋ 새 단어 등록'으로 사전에 없는 단어도 직접 추가할 수 있어요.",
+  ],
+};
+function WhatsNewModal({ notes, onClose }) {
+  return ReactDOM.createPortal(
+    <div className="guide-overlay" onClick={onClose}>
+      <div className="guide-modal whatsnew-modal" onClick={(e) => e.stopPropagation()}>
+        <div className="whatsnew-badge">업데이트 안내 · {APP_VERSION}</div>
+        <ul className="whatsnew-list">
+          {notes.map((n, i) => <li key={i}>{n}</li>)}
+        </ul>
+        <button className="guide-start whatsnew-btn" onClick={onClose}>확인</button>
+      </div>
+    </div>,
+    document.body
+  );
+}
+
 /* ===================== 루트 ===================== */
 function App() {
   const [cards, setCards] = useState(loadCards);
@@ -6187,6 +6216,7 @@ function App() {
   const [decks, setDecks] = useState(loadDecks);
   const [onboard, setOnboard] = useState(loadOnboard); // {level, done} | null
   const [showGuide, setShowGuide] = useState(false); // 첫 사용자 가이드
+  const [showWhatsNew, setShowWhatsNew] = useState(false); // 업데이트 안내
   const voiceRef = useJaVoice();
 
   // 가이드는 마운트 직후 잠깐 뒤에 띄운다(온보딩 완료 직후 화면 전환과 겹쳐 보이지 않도록).
@@ -6195,6 +6225,20 @@ function App() {
     const t = setTimeout(() => setShowGuide(true), 450);
     return () => clearTimeout(t);
   }, []);
+
+  // 업데이트 안내: "이번 세션 시작 시점에 이미 온보딩을 마친 상태였는가"로 기존 사용자를 판별한다.
+  // (이번 세션 안에서 막 온보딩을 마친 신규 사용자는 제외 — 이미 첫 사용자 가이드로 안내받았음)
+  const wasExistingUserRef = useRef(!!(onboard && onboard.done));
+  useEffect(() => {
+    if (!onboard || !onboard.done) return;
+    if (!wasExistingUserRef.current) { saveWhatsNewSeen(APP_VERSION); return; }
+    const seen = loadWhatsNewSeen();
+    if (seen === APP_VERSION) return;
+    const notes = WHATS_NEW[APP_VERSION];
+    if (!notes || !notes.length) { saveWhatsNewSeen(APP_VERSION); return; }
+    const t = setTimeout(() => setShowWhatsNew(true), 500);
+    return () => clearTimeout(t);
+  }, [onboard && onboard.done]);
 
   // iOS 잔상 방지: 온보딩(.onb)은 position:fixed 노란 오버레이로 전체화면을 덮는데,
   // <html>/<body> 자체 배경과 theme-color는 계속 흰색 계열로 남아있다. 이 불일치가
@@ -6342,6 +6386,10 @@ function App() {
       </nav>
 
       {showGuide && <FirstRunGuide onClose={() => setShowGuide(false)} />}
+      {!showGuide && showWhatsNew && (
+        <WhatsNewModal notes={WHATS_NEW[APP_VERSION]}
+          onClose={() => { saveWhatsNewSeen(APP_VERSION); setShowWhatsNew(false); }} />
+      )}
     </div>
   );
 }
@@ -7307,6 +7355,17 @@ html, body { overscroll-behavior-x: none; overflow: hidden; }
 .guide-footnote { font-size: 12px; color: var(--ink-2); text-align: center; margin: -8px 0 16px; word-break: keep-all; }
 .guide-start { width: 100%; height: 48px; border: none; border-radius: 14px;
   background: var(--accent); color: var(--on-accent); font-size: 16px; font-weight: 800; cursor: pointer; }
+
+/* 업데이트 안내(What's New) — 온보딩/가이드와 달리 눈에 띄지 않는 무채색 톤으로 */
+.whatsnew-modal { padding-top: 22px; }
+.whatsnew-badge { display: inline-block; background: var(--fill); color: var(--ink-2);
+  font-size: 12px; font-weight: 700; padding: 4px 12px; border-radius: 980px; margin-bottom: 16px; }
+.whatsnew-list { text-align: left; margin: 0 0 20px; padding: 0; list-style: none;
+  display: flex; flex-direction: column; gap: 11px; }
+.whatsnew-list li { font-size: 13.5px; color: var(--ink); line-height: 1.5; padding-left: 16px;
+  position: relative; word-break: keep-all; }
+.whatsnew-list li::before { content: "•"; position: absolute; left: 0; color: var(--ink-2); font-weight: 800; }
+.whatsnew-btn { background: var(--fill); color: var(--ink); }
 `;
 
 try {
