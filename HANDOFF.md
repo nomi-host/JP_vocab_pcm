@@ -2,7 +2,7 @@
 
 > 마지막 업데이트: 2026-07-02  
 > 작업 브랜치: `claude/app-structure-handoff-53n20j` (프리뷰 전용 — main 미반영, 아래 "배포 현황" 참고)  
-> 현재 버전(이 브랜치): `v1.0.7`
+> 현재 버전(이 브랜치): `v1.0.8`
 
 ---
 
@@ -189,6 +189,14 @@
 - **모달을 열 때도 깜빡이는 회귀 발생 → v1.0.6의 `forceRepaint()` 추가분 되돌림**: `DetailModal`/`FirstRunGuide`/`WhatsNewModal` 닫기 완료 후 `requestAnimationFrame` 2프레임 뒤 `forceRepaint()`를 호출하도록 했었는데, 사용자가 모달을 닫고 바로 다음 모달을 여는 경우 그 지연된 repaint(강제 리플로우+opacity/display 토글)가 **다음 모달이 이미 열린 시점과 겹쳐 실행되며 "여는데도 깜빡인다"는 새 증상**을 만든 것으로 파악됨. 세 곳 모두 `forceRepaint()` 호출을 제거하고 원래의 단순한 `onClose()`만 남김 — 순정 닫힘 깜빡임 자체는 아직 미해결 상태로 되돌아감(다음 접근 필요).
 - **온보딩 카테고리 설명 정렬 수정 — 뱃지가 늘어나던 문제**: v1.0.6에서 CSS 그리드로 정렬할 때 `.onb-note .badge-cat`에 `justify-self`를 지정하지 않아 그리드 기본값(`stretch`)이 적용되어, 짧은 `ピッ` 뱃지가 `DAILY` 뱃지 폭까지 늘어나 버렸음(뱃지 크기 자체가 커짐 — 의도한 게 아님). `justify-self: start` 추가로 뱃지는 원래 크기 그대로 두고, 그 뒤에 남는 빈 칸(간격)만으로 텍스트 시작 위치를 맞추도록 수정.
 - APP_VERSION `v1.0.7` / APP_BUILD `2026-07-02`.
+
+#### v1.0.8 — 모달 열림/닫힘 깜빡임 근본 대응(GPU 레이어 승격)
+
+- **재진단(핵심)**: 지금까지의 시도(페이드 v1.0.5, forceRepaint v1.0.6)가 다 실패한 이유를 앱 셸 레이어 구조에서 찾음. `.app`(flex column) 안에서 **`.scroll-area`는 `-webkit-overflow-scrolling:touch` 때문에 자체 GPU 합성 레이어**인 반면, **`.topbar`·`.tabbar`는 일반(CPU 페인트) 레이어**다. 반투명 어두운 모달 오버레이(`rgba(0,0,0,.45)`)가 이 위에 나타났다/사라질 때, GPU 레이어(scroll-area)는 컴포지터가 즉시 재합성하지만 CPU 레이어(topbar/tabbar)는 리페인트가 필요해 **두 영역의 처리 시점이 어긋나며 헤더 경계에서 "따로 원래대로 돌아오는" 깜빡임**이 발생. 열 때·닫을 때 모두 동일 원인.
+- **수정**: `.topbar`·`.tabbar`에 `transform: translateZ(0); backface-visibility: hidden`을 줘 GPU 레이어로 승격 → 세 영역(헤더/스크롤/탭바)이 모두 컴포지터에서 균일하게 처리되어 오버레이 등장·소멸이 한 번에 반영됨. `.scroll-area`엔 `background: var(--bg)`를 명시해 그 영역이 자기 레이어 안에서 불투명하게 자립하도록(루트 레이어 배경에 의존하지 않도록) 보강. **이 수정은 특정 모달이 아니라 뒤에 깔린 앱 셸 레이어를 고치는 것이라, `DetailModal`·`WordDetailModal`·`DeckManager`·`FeedbackBox`·가이드·업데이트 안내 등 모든 오버레이에 동시에 적용됨.**
+- 스와이프 닫기 애니메이션(v1.0.4~)·오버레이 페이드(v1.0.5)는 UX상 유지(이 깜빡임과는 별개). v1.0.6에서 넣었던 닫힘 후 `forceRepaint()` 호출은 v1.0.7에서 이미 제거됨(열림 깜빡임 유발했었음).
+- ⚠️ iOS 실기기 미검증. 그래도 남아있으면: 다음 후보는 (a) `.app` 자체도 레이어 승격, (b) 상태바 인접(safe-area) 영역 배경을 별도 처리, (c) 오버레이를 불투명 배경+내부 반투명 패널 구조로 변경.
+- APP_VERSION `v1.0.8` / APP_BUILD `2026-07-02`.
 
 ---
 
