@@ -290,7 +290,7 @@ const DAILY_TOTAL = 30;        // 오늘의 학습 하루 총량(복습+신규) 
 const NEW_RATIO_MIN = 0.3;     // 신규 최소 비율(30%) — 복습이 쌓여도 신규 자리 보장
 
 // 앱 버전/배포일 (정식 배포 시 v1.0으로). 통계탭 하단 워터마크 표시.
-const APP_VERSION = "v1.0.8";
+const APP_VERSION = "v1.0.9";
 const APP_BUILD = "2026-07-02";
 const FEEDBACK_EMAIL = "micki.02@kakaopiccoma.com";
 const FEEDBACK_URL = "https://script.google.com/macros/s/AKfycbyCuoe-Oa7hpb4tKlkeyiG3LFVWaLMTZG9M5wUxChsFzI12kGQEaGLhdLyuuAoLhktc/exec"; // 제보 메일 발송용 GAS 웹앱
@@ -2432,7 +2432,12 @@ function DetailModal({ card, onClose, voiceRef, allCards, cards, decks, onToggle
   const dragRef = useRef({ startY: 0, dragging: false, dy: 0 });
   const [dragY, setDragY] = useState(0);
   const [closing, setClosing] = useState(false);
+  const [shown, setShown] = useState(false); // 마운트 직후 다음 프레임에 true → 오버레이 opacity 0→1 페이드인
   const closedRef = useRef(false);
+  useEffect(() => {
+    const r = requestAnimationFrame(() => setShown(true));
+    return () => cancelAnimationFrame(r);
+  }, []);
   const requestClose = () => {
     if (closedRef.current) return;
     closedRef.current = true;
@@ -2468,7 +2473,7 @@ function DetailModal({ card, onClose, voiceRef, allCards, cards, decks, onToggle
 
   return ReactDOM.createPortal(
     <div className="kanji-modal-overlay" onClick={closing ? undefined : requestClose}
-      style={{ opacity: closing ? 0 : 1, transition: `opacity ${CLOSE_MS}ms ease` }}>
+      style={{ opacity: (closing || !shown) ? 0 : 1, transition: `opacity ${CLOSE_MS}ms ease` }}>
       <div className="kanji-modal" onClick={(e) => e.stopPropagation()}
         onTouchStart={onSheetTouchStart} onTouchMove={onSheetTouchMove} onTouchEnd={onSheetTouchEnd}
         style={{ transform: dragY ? `translateY(${dragY}px)` : undefined,
@@ -6203,7 +6208,7 @@ const WHATSNEW_KEY = "jp-vocab-whatsnew-seen";
 function loadWhatsNewSeen() { try { return localStorage.getItem(WHATSNEW_KEY); } catch (e) { return APP_VERSION; } }
 function saveWhatsNewSeen(v) { try { localStorage.setItem(WHATSNEW_KEY, v); } catch (e) {} }
 const WHATS_NEW = {
-  "v1.0.8": [
+  "v1.0.9": [
     "단어 상세 팝업을 아래로 스와이프하면 닫혀요.",
     "헤더 오른쪽 아이콘을 누르면 처음 사용법 안내를 언제든 다시 볼 수 있어요.",
     "목록 탭 '＋ 새 단어 등록'으로 사전에 없는 단어도 직접 추가할 수 있어요.",
@@ -6923,7 +6928,8 @@ html, body { overscroll-behavior-x: none; overflow: hidden; }
 /* 상세 모달 */
 .modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,.35);
   display: flex; align-items: center; justify-content: center; z-index: 50;
-  padding: 16px; animation: fade .15s ease; }
+  padding: 16px; animation: fade .15s ease;
+  will-change: opacity; transform: translateZ(0); -webkit-transform: translateZ(0); }
 @keyframes fade { from { opacity: 0; } to { opacity: 1; } }
 .modal { background: var(--surface); width: 100%; max-width: 440px;
   border-radius: 22px; padding: 0 18px 18px;
@@ -7143,7 +7149,8 @@ html, body { overscroll-behavior-x: none; overflow: hidden; }
 .feedback-open { width: 100%; height: 46px; border-radius: 14px; border: 1px solid var(--line);
   background: var(--surface); color: var(--ink-2); font-size: 14px; font-weight: 700; cursor: pointer; }
 .fb-overlay { position: fixed; inset: 0; background: rgba(0,0,0,.4); z-index: 100;
-  display: flex; align-items: center; justify-content: center; padding: 20px; }
+  display: flex; align-items: center; justify-content: center; padding: 20px; animation: fade .15s ease;
+  will-change: opacity; transform: translateZ(0); -webkit-transform: translateZ(0); }
 .fb-modal { width: 100%; max-width: 380px; background: var(--surface); border-radius: 18px; padding: 20px; }
 .fb-title { font-size: 17px; font-weight: 800; color: var(--ink); }
 .fb-sub { font-size: 12.5px; color: var(--muted); margin: 6px 0 12px; line-height: 1.5; word-break: keep-all; }
@@ -7164,8 +7171,11 @@ html, body { overscroll-behavior-x: none; overflow: hidden; }
   margin: 18px 0 6px; letter-spacing: .3px; }
 
 /* ===== 한자 상세 모달 ===== */
+/* will-change:opacity + translateZ로 오버레이를 자체 GPU 레이어로 승격 → opacity 페이드가 컴포지터
+   한 곳에서 전체적으로 처리되어, 어두워짐/밝아짐이 헤더 위/아래에서 따로 노는 깜빡임을 없앤다. */
 .kanji-modal-overlay { position: fixed; inset: 0; z-index: 9999; background: rgba(0,0,0,.45);
   display: flex; align-items: flex-end; justify-content: center;
+  will-change: opacity; transform: translateZ(0); -webkit-transform: translateZ(0);
   font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Hiragino Kaku Gothic ProN", "Noto Sans JP", system-ui, sans-serif; }
 .kanji-modal { width: 100%; max-width: 480px; height: 90vh; height: 90dvh; max-height: 90vh; max-height: 90dvh;
   display: flex; flex-direction: column; overflow: hidden;
@@ -7373,7 +7383,8 @@ html, body { overscroll-behavior-x: none; overflow: hidden; }
 
 /* 첫 사용자 가이드 */
 .guide-overlay { position: fixed; inset: 0; background: rgba(0,0,0,.4); z-index: 60;
-  display: flex; align-items: center; justify-content: center; padding: 20px; animation: fade .15s ease; }
+  display: flex; align-items: center; justify-content: center; padding: 20px; animation: fade .15s ease;
+  will-change: opacity; transform: translateZ(0); -webkit-transform: translateZ(0); }
 .guide-modal { background: var(--surface); width: 100%; max-width: 380px; border-radius: 22px;
   padding: 0 22px 22px; max-height: calc(100dvh - 40px); overflow-y: auto;
   animation: pop .22s cubic-bezier(.2,.8,.2,1); text-align: center; }
