@@ -290,7 +290,7 @@ const DAILY_TOTAL = 30;        // 오늘의 학습 하루 총량(복습+신규) 
 const NEW_RATIO_MIN = 0.3;     // 신규 최소 비율(30%) — 복습이 쌓여도 신규 자리 보장
 
 // 앱 버전/배포일 (정식 배포 시 v1.0으로). 통계탭 하단 워터마크 표시.
-const APP_VERSION = "v1.0.20";
+const APP_VERSION = "v1.0.21";
 const APP_BUILD = "2026-07-02";
 const FEEDBACK_EMAIL = "micki.02@kakaopiccoma.com";
 const FEEDBACK_URL = "https://script.google.com/macros/s/AKfycbyCuoe-Oa7hpb4tKlkeyiG3LFVWaLMTZG9M5wUxChsFzI12kGQEaGLhdLyuuAoLhktc/exec"; // 제보 메일 발송용 GAS 웹앱
@@ -2427,7 +2427,7 @@ function DetailModal({ card, onClose, voiceRef, allCards, cards, decks, onToggle
   // 닫힐 때는(스와이프든 X버튼이든 동일하게) 즉시 사라지지 않도록, 배경(오버레이)은 페이드 아웃하고
   // 시트는 화면 밖까지 미끄러지듯 내려간 뒤(CLOSE_MS) 실제로 닫는다 — 한 프레임에 통째로 사라지면
   // iOS에서 헤더 위/아래 영역이 서로 다른 시점에 다시 그려지며 깜빡이는 것처럼 보이는 문제 완화.
-  const CLOSE_MS = 220;
+  const CLOSE_MS = 320;
   const bodyRef = useRef(null);
   const dragRef = useRef({ startY: 0, dragging: false, dy: 0 });
   const [dragY, setDragY] = useState(0);
@@ -2441,8 +2441,7 @@ function DetailModal({ card, onClose, voiceRef, allCards, cards, decks, onToggle
   const requestClose = () => {
     if (closedRef.current) return;
     closedRef.current = true;
-    setClosing(true);
-    setDragY((d) => Math.max(d, 2000));
+    setClosing(true); // 시트를 자기 높이(100%)만큼만 아래로 미끄러뜨려 부드럽게 닫음(2000px 순간이동 X)
     setTimeout(onClose, CLOSE_MS);
   };
   const onSheetTouchStart = (e) => {
@@ -2476,8 +2475,8 @@ function DetailModal({ card, onClose, voiceRef, allCards, cards, decks, onToggle
       style={{ opacity: (closing || !shown) ? 0 : 1, transition: `opacity ${CLOSE_MS}ms ease` }}>
       <div className="kanji-modal" onClick={(e) => e.stopPropagation()}
         onTouchStart={onSheetTouchStart} onTouchMove={onSheetTouchMove} onTouchEnd={onSheetTouchEnd}
-        style={{ transform: dragY ? `translateY(${dragY}px)` : undefined,
-          transition: dragRef.current.dragging ? "none" : `transform ${CLOSE_MS}ms cubic-bezier(.25,.1,.25,1)` }}>
+        style={{ transform: closing ? "translateY(100%)" : (dragY ? `translateY(${dragY}px)` : undefined),
+          transition: dragRef.current.dragging ? "none" : `transform ${CLOSE_MS}ms cubic-bezier(.32,.72,0,1)` }}>
         <div className="kanji-modal-head">
           {canBack ? (
             <button className="kanji-modal-x" onClick={goBack} aria-label="뒤로"><Icon.Back /></button>
@@ -6194,7 +6193,7 @@ function FirstRunGuide({ onClose, firstTime }) {
             </div>
           ))}
         </div>
-        <div className="guide-footnote"><b>이 안내는 우상단 츠군을 누르면 언제든 다시 확인할 수 있어요.</b></div>
+        <div className="guide-footnote"><b>이 안내는 츠군을 누르면 언제든 다시 확인할 수 있어요.</b></div>
         <button className="guide-start" onClick={finish}>{firstTime ? "시작하기" : "다시 학습하러 가기"}</button>
       </div>
     </div>
@@ -6209,7 +6208,7 @@ const WHATSNEW_KEY = "jp-vocab-whatsnew-seen";
 function loadWhatsNewSeen() { try { return localStorage.getItem(WHATSNEW_KEY); } catch (e) { return APP_VERSION; } }
 function saveWhatsNewSeen(v) { try { localStorage.setItem(WHATSNEW_KEY, v); } catch (e) {} }
 const WHATS_NEW = {
-  "v1.0.20": [
+  "v1.0.21": [
     "단어 상세 팝업을 아래로 스와이프하면 닫혀요.",
     "헤더 오른쪽 아이콘을 누르면 처음 사용법 안내를 언제든 다시 볼 수 있어요.",
     "목록 탭 '＋ 새 단어 등록'으로 사전에 없는 단어도 직접 추가할 수 있어요.",
@@ -7391,8 +7390,8 @@ html, body { overscroll-behavior-x: none; overflow: hidden; }
 .install-share { display: inline-block; font-family: -apple-system, BlinkMacSystemFont, sans-serif; }
 
 /* 첫 사용자 가이드 */
-.guide-overlay { position: fixed; inset: 0; top: var(--dim-top, 0px);
-  background: linear-gradient(to bottom, rgba(0,0,0,0) 0, rgba(0,0,0,.4) 200px); z-index: 60;
+/* 가이드/업데이트 안내는 원래대로 전체 화면 중앙(딤 헤더 아래 시작·그라데이션 적용 안 함) */
+.guide-overlay { position: fixed; inset: 0; background: rgba(0,0,0,.4); z-index: 60;
   display: flex; align-items: center; justify-content: center; padding: 20px; animation: fade .15s ease; }
 .guide-modal { background: var(--surface); width: 100%; max-width: 380px; border-radius: 22px;
   padding: 0 22px 22px; max-height: calc(100dvh - 40px); overflow-y: auto;
