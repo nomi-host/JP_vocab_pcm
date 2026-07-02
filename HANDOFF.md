@@ -166,7 +166,7 @@
 
 | 환경 | URL | 상태 |
 |---|---|---|
-| 운영(Production) | pitto-voca.vercel.app | `main` 브랜치 기준, v1.0.1까지 반영 |
+| 운영(Production) | pitto-voca.vercel.app | `main` 브랜치 기준, v1.0.3까지 반영 |
 
 ---
 
