@@ -290,7 +290,7 @@ const DAILY_TOTAL = 30;        // 오늘의 학습 하루 총량(복습+신규) 
 const NEW_RATIO_MIN = 0.3;     // 신규 최소 비율(30%) — 복습이 쌓여도 신규 자리 보장
 
 // 앱 버전/배포일 (정식 배포 시 v1.0으로). 통계탭 하단 워터마크 표시.
-const APP_VERSION = "v1.0.12";
+const APP_VERSION = "v1.0.13";
 const APP_BUILD = "2026-07-02";
 const FEEDBACK_EMAIL = "micki.02@kakaopiccoma.com";
 const FEEDBACK_URL = "https://script.google.com/macros/s/AKfycbyCuoe-Oa7hpb4tKlkeyiG3LFVWaLMTZG9M5wUxChsFzI12kGQEaGLhdLyuuAoLhktc/exec"; // 제보 메일 발송용 GAS 웹앱
@@ -6123,20 +6123,24 @@ function forceRepaint() {
    따로 칠한다. 그래서 모달 오버레이가 본문을 딤해도 상태바 띠는 theme-color(밝은색) 그대로 남아,
    본문과 다른 시점에 어두워졌다/밝아지며 깜빡이는 것처럼 보였다.
    모달이 열려있는 동안 theme-color를 딤 색과 같은 값으로 바꿔, 상태바 띠도 본문과 함께 어두워지게 한다.
-   여러 오버레이가 겹쳐도 되도록 depth 카운트로 관리(마지막 하나 닫힐 때만 원복). */
-const OVERLAY_DIM_THEME = "#86868a"; // rgba(0,0,0,.45)을 앱 배경(#f2f2f7) 위에 얹은 값과 비슷한 톤
+   여러 오버레이가 겹쳐도 되도록 depth 카운트로 관리(마지막 하나 닫힐 때만 원복).
+   ※ 목록>단어상세>상세처럼 모달이 겹치면 딤이 두 겹 쌓여 본문이 더 어두워지므로, theme-color도
+     depth에 맞춰 더 어둡게 맞춘다(안 그러면 상태바만 밝게 떠 색이 달라 보임). */
 const BASE_THEME = "#f2f2f7";
+// depth 1: 딤 한 겹(≈ .45 over #f2f2f7), depth 2: 두 겹(.35 후 .45), depth 3+: 더 어둡게.
+const OVERLAY_DIM_THEMES = ["#86868a", "#565659", "#3a3a3c"];
 let _overlayThemeDepth = 0;
 function _setTheme(color) {
   try { const m = document.querySelector('meta[name="theme-color"]'); if (m) m.setAttribute("content", color); } catch (e) {}
 }
-function pushOverlayTheme() {
-  _overlayThemeDepth++;
-  if (_overlayThemeDepth === 1) _setTheme(OVERLAY_DIM_THEME);
+function _applyOverlayTheme() {
+  if (_overlayThemeDepth <= 0) { _setTheme(BASE_THEME); return; }
+  _setTheme(OVERLAY_DIM_THEMES[Math.min(_overlayThemeDepth, OVERLAY_DIM_THEMES.length) - 1]);
 }
+function pushOverlayTheme() { _overlayThemeDepth++; _applyOverlayTheme(); }
 function popOverlayTheme() {
   _overlayThemeDepth = Math.max(0, _overlayThemeDepth - 1);
-  if (_overlayThemeDepth === 0) _setTheme(BASE_THEME);
+  _applyOverlayTheme();
 }
 /* 오버레이 컴포넌트가 마운트~언마운트 동안 상태바 딤을 유지하도록 하는 훅 */
 function useOverlayTheme() {
@@ -6238,7 +6242,7 @@ const WHATSNEW_KEY = "jp-vocab-whatsnew-seen";
 function loadWhatsNewSeen() { try { return localStorage.getItem(WHATSNEW_KEY); } catch (e) { return APP_VERSION; } }
 function saveWhatsNewSeen(v) { try { localStorage.setItem(WHATSNEW_KEY, v); } catch (e) {} }
 const WHATS_NEW = {
-  "v1.0.12": [
+  "v1.0.13": [
     "단어 상세 팝업을 아래로 스와이프하면 닫혀요.",
     "헤더 오른쪽 아이콘을 누르면 처음 사용법 안내를 언제든 다시 볼 수 있어요.",
     "목록 탭 '＋ 새 단어 등록'으로 사전에 없는 단어도 직접 추가할 수 있어요.",

@@ -2,7 +2,7 @@
 
 > 마지막 업데이트: 2026-07-02  
 > 작업 브랜치: `claude/app-structure-handoff-53n20j` (프리뷰 전용 — main 미반영, 아래 "배포 현황" 참고)  
-> 현재 버전(이 브랜치): `v1.0.12`
+> 현재 버전(이 브랜치): `v1.0.13`
 
 ---
 
@@ -229,6 +229,13 @@
 - 구현: 모듈 전역 depth 카운터 + `pushOverlayTheme()`/`popOverlayTheme()` + `useOverlayTheme()` 훅. `DetailModal`·`WordDetailModal`·`DeckManager`·`FirstRunGuide`·`WhatsNewModal`은 마운트~언마운트 동안, `FeedbackBox`는 `open` 동안 딤 유지. 여러 오버레이가 겹쳐도 마지막 하나 닫힐 때만 원복.
 - ⚠️ iOS 실기기 미검증. **참고: 이 환경(샌드박스)에서는 실제 아이폰 Safari 렌더/합성 동작을 재현·테스트할 수 없어, 이 계열 버그는 코드 추론으로만 접근 중이라 반복 시도가 있었음.** v1.0.5~v1.0.11의 다른 시도(페이드/GPU 승격/레이어 통합/오버레이 커버리지)는 상태바 깜빡임에는 효과가 없었고, theme-color 동기화가 이 영역의 정석 제어법.
 - APP_VERSION `v1.0.12` / APP_BUILD `2026-07-02`.
+
+#### v1.0.13 — 중첩 모달 상태바 색 불일치 수정(depth별 theme-color)
+
+- **v1.0.12로 깜빡임 간격은 짧아졌으나(=효과 있음), 새 문제**: 목록>단어상세(WordDetailModal, 딤 .35)>상세(DetailModal, 딤 .45)처럼 모달이 겹치면 딤이 **두 겹** 쌓여 본문이 훨씬 어두워지는데, theme-color는 한 겹 기준(`#86868a`)만 반영해 상태바만 밝게 떠 "색이 아예 다른" 상태가 됐음.
+- **수정**: theme-color를 **오버레이 depth에 맞춰 더 어둡게** 단계별로 적용. `OVERLAY_DIM_THEMES = ["#86868a"(1겹), "#565659"(2겹: .35→.45 계산값), "#3a3a3c"(3겹+)]`. push/pop 시 현재 depth에 맞는 색으로 재적용(닫으면 얕은 depth 색으로 되돌아가고, 0이면 base 복원).
+- ⚠️ iOS 실기기 미검증(샌드박스에서 재현 불가). depth-2 색은 실제 두 오버레이 알파 합성 계산값이라 대략 맞을 것.
+- APP_VERSION `v1.0.13` / APP_BUILD `2026-07-02`.
 
 ---
 
