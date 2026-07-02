@@ -2,7 +2,7 @@
 
 > 마지막 업데이트: 2026-07-02  
 > 작업 브랜치: `claude/app-structure-handoff-53n20j` (프리뷰 전용 — main 미반영, 아래 "배포 현황" 참고)  
-> 현재 버전(이 브랜치): `v1.0.11`
+> 현재 버전(이 브랜치): `v1.0.12`
 
 ---
 
@@ -221,6 +221,14 @@
 - **수정**: 네 오버레이(`.kanji-modal-overlay`, `.modal-overlay`, `.guide-overlay`, `.fb-overlay`) 모두 `top: env(safe-area-inset-top, 0px)`로 시작점을 내려 **상태바 띠를 아예 안 덮게** 함 → 그 영역엔 딤이 적용/해제되지 않으니 깜빡일 게 없음. 상태바 영역이 밝게 유지되는 건 iOS 앱에서 자연스러운 동작. 노치 없는 기기(inset 0)에선 fallback 0px라 기존과 동일.
 - ⚠️ iOS 실기기 미검증. 이 변경으로도 상태바 띠가 깜빡이면, 원인이 딤 커버리지가 아니라 iOS의 `theme-color`/상태바 스타일 재계산일 수 있음 → 그땐 모달 open/close에 맞춰 `theme-color`를 어둡게 동기화하거나 `apple-mobile-web-app-status-bar-style` 조정 검토.
 - APP_VERSION `v1.0.11` / APP_BUILD `2026-07-02`.
+
+#### v1.0.12 — 상태바 깜빡임: theme-color 동기화로 상태바도 본문과 함께 딤
+
+- **v1.0.11(오버레이가 상태바 안 덮게)로도 "아무것도 안 바뀜"** = 상태바 띠의 어두워짐은 **내 오버레이 div가 아니라 iOS 시스템이 `<meta theme-color>`로 그 영역을 따로 칠하는 것**임이 방증됨. 또 사용자는 상태바가 밝게 남는 걸 원치 않고 **본문과 같이 딤되길** 원함.
+- **수정**: v1.0.11의 `top: env(safe-area-inset-top)` 전부 되돌려 오버레이가 다시 전체(상태바 포함)를 덮게 함. 그리고 **모달이 열려있는 동안 `theme-color`를 딤 색(`#86868a`, `rgba(0,0,0,.45)`을 앱 배경에 얹은 톤)으로 바꾸고 닫히면 `#f2f2f7`로 복원**하는 방식 추가. 이러면 시스템이 칠하는 상태바 띠도 우리 통제 하에 본문과 함께 어두워져 타이밍 차이(깜빡임)가 사라짐.
+- 구현: 모듈 전역 depth 카운터 + `pushOverlayTheme()`/`popOverlayTheme()` + `useOverlayTheme()` 훅. `DetailModal`·`WordDetailModal`·`DeckManager`·`FirstRunGuide`·`WhatsNewModal`은 마운트~언마운트 동안, `FeedbackBox`는 `open` 동안 딤 유지. 여러 오버레이가 겹쳐도 마지막 하나 닫힐 때만 원복.
+- ⚠️ iOS 실기기 미검증. **참고: 이 환경(샌드박스)에서는 실제 아이폰 Safari 렌더/합성 동작을 재현·테스트할 수 없어, 이 계열 버그는 코드 추론으로만 접근 중이라 반복 시도가 있었음.** v1.0.5~v1.0.11의 다른 시도(페이드/GPU 승격/레이어 통합/오버레이 커버리지)는 상태바 깜빡임에는 효과가 없었고, theme-color 동기화가 이 영역의 정석 제어법.
+- APP_VERSION `v1.0.12` / APP_BUILD `2026-07-02`.
 
 ---
 
