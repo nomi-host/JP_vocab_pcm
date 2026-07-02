@@ -290,7 +290,7 @@ const DAILY_TOTAL = 30;        // 오늘의 학습 하루 총량(복습+신규) 
 const NEW_RATIO_MIN = 0.3;     // 신규 최소 비율(30%) — 복습이 쌓여도 신규 자리 보장
 
 // 앱 버전/배포일 (정식 배포 시 v1.0으로). 통계탭 하단 워터마크 표시.
-const APP_VERSION = "v1.0.16";
+const APP_VERSION = "v1.0.17";
 const APP_BUILD = "2026-07-02";
 const FEEDBACK_EMAIL = "micki.02@kakaopiccoma.com";
 const FEEDBACK_URL = "https://script.google.com/macros/s/AKfycbyCuoe-Oa7hpb4tKlkeyiG3LFVWaLMTZG9M5wUxChsFzI12kGQEaGLhdLyuuAoLhktc/exec"; // 제보 메일 발송용 GAS 웹앱
@@ -2377,6 +2377,7 @@ function FuriganaText({ tokens, showFuri }) {
    1) 단어 상세: 단어+읽기+뜻+품사+예문 + (한자어면) 한자 카드 목록 + 네이버/사전 링크
    2) 한자 상세: 한자 카드를 누르면 그 한자의 음훈독·부수·획수·뜻·활용단어 표시 */
 function DetailModal({ card, onClose, voiceRef, allCards, cards, decks, onToggleStar, onTogglePriority, onToggleDeck, onCreateDeck }) {
+  useStatusBarDim("#858588"); // 딤 .45 색 — 상태바도 함께 어둡게
   // 방문 기록 스택: 각 항목 { kind:"word"|"kanji", card?, kanji? }
   const [stack, setStack] = useState([{ kind: "word", card }]);
   const [showDeckPicker, setShowDeckPicker] = useState(false); // '단어장에 담기' 버튼 눌렀을 때만 목록 노출
@@ -4385,6 +4386,7 @@ function statusKind(c) {
 }
 
 function WordDetailModal({ card, onClose, onSuspend, onUnsuspend, onSave, onDelete, voiceRef, decks, onToggleDeck, onCreateDeck, onToggleStar, onTogglePriority, allCards }) {
+  useStatusBarDim("#9D9DA1"); // 딤 .35 색
   const [editing, setEditing] = useState(false);
   const [form, setForm] = useState(null);
   const [showDetail, setShowDetail] = useState(false); // 한자/단어 상세(DetailModal)
@@ -4944,6 +4946,7 @@ function FilterBar({ flt, setFlt, deckFlt, setDeckFlt, posFlt, setPosFlt, catFlt
 
 /* 단어장 관리 모달: 생성·이름변경·삭제 */
 function DeckManager({ decks, cards, onClose, onCreate, onRename, onDelete }) {
+  useStatusBarDim("#9D9DA1"); // 딤 .35 색
   const [newName, setNewName] = useState("");
   const countFor = (id) => cards.filter((c) => (c.decks || []).includes(id)).length;
   return ReactDOM.createPortal(
@@ -5356,6 +5359,8 @@ function FeedbackBox() {
   const [name, setName] = useState("");
   const [text, setText] = useState("");
   const [status, setStatus] = useState(""); // "" | sending | ok | fail
+  // 제보 오버레이는 open일 때만 렌더 → open 동안만 상태바 딤(fb-overlay 딤 .4 색)
+  useEffect(() => { if (!open) return; pushStatusBarDim("#919194"); return () => popStatusBarDim(); }, [open]);
   const send = async () => {
     if (!text.trim() || status === "sending") return;
     setStatus("sending");
@@ -6117,6 +6122,26 @@ function forceRepaint() {
   } catch (e) {}
 }
 
+/* 상태바(시계·다이내믹아일랜드) 딤 동기화 — 온보딩 노란 상태바 제어와 동일한 검증된 메커니즘.
+   standalone 앱에선 상태바 배경이 <meta theme-color> 및 html/body 배경을 따라가므로, 모달이 열리면
+   그 모달의 "실제 딤 색"(딤이 헤더 배경 #f2f2f7 위에 얹힌 결과값)으로 상태바도 함께 칠해 본문과 맞춘다.
+   ※ 색 값은 각 오버레이의 알파에 맞춰 정확히 계산해 넘긴다(틀리면 상태바만 더 밝거나 어둡게 어긋남):
+     딤 .35 → #9D9DA1, .40 → #919194, .45 → #858588 (모두 #f2f2f7 * (1-alpha)).
+   ※ 모달이 겹치면(예: 단어상세>상세) 맨 위 모달 색을 쓰도록 스택으로 관리. */
+const STATUSBAR_BASE = "#f2f2f7";
+const _sbStack = [];
+function _applyStatusBar() {
+  const c = _sbStack.length ? _sbStack[_sbStack.length - 1] : null;
+  try { const m = document.querySelector('meta[name="theme-color"]'); if (m) m.setAttribute("content", c || STATUSBAR_BASE); } catch (e) {}
+  try { document.documentElement.style.background = c || ""; document.body.style.background = c || ""; } catch (e) {}
+}
+function pushStatusBarDim(color) { _sbStack.push(color); _applyStatusBar(); }
+function popStatusBarDim() { _sbStack.pop(); _applyStatusBar(); }
+/* 오버레이 컴포넌트가 마운트~언마운트 동안 상태바를 자기 딤 색으로 유지 */
+function useStatusBarDim(color) {
+  useEffect(() => { pushStatusBarDim(color); return () => popStatusBarDim(); }, [color]);
+}
+
 function InstallBanner() {
   const [show, setShow] = useState(false);
   const [iosHelp, setIosHelp] = useState(false);
@@ -6179,6 +6204,7 @@ const GUIDE_STEPS = [
   { icon: Icon.AddCircle, title: "없는 단어는 직접 등록", desc: "목록 탭의 '＋ 새 단어 등록'에서 사전에 없는 단어도 직접 추가할 수 있어요." },
 ];
 function FirstRunGuide({ onClose, firstTime }) {
+  useStatusBarDim("#919194"); // guide-overlay 딤 .4 색
   const finish = () => { try { localStorage.setItem(GUIDE_KEY, "1"); } catch (e) {} onClose(); };
   return (
     <div className="guide-overlay" onClick={finish}>
@@ -6212,13 +6238,14 @@ const WHATSNEW_KEY = "jp-vocab-whatsnew-seen";
 function loadWhatsNewSeen() { try { return localStorage.getItem(WHATSNEW_KEY); } catch (e) { return APP_VERSION; } }
 function saveWhatsNewSeen(v) { try { localStorage.setItem(WHATSNEW_KEY, v); } catch (e) {} }
 const WHATS_NEW = {
-  "v1.0.16": [
+  "v1.0.17": [
     "단어 상세 팝업을 아래로 스와이프하면 닫혀요.",
     "헤더 오른쪽 아이콘을 누르면 처음 사용법 안내를 언제든 다시 볼 수 있어요.",
     "목록 탭 '＋ 새 단어 등록'으로 사전에 없는 단어도 직접 추가할 수 있어요.",
   ],
 };
 function WhatsNewModal({ notes, onClose }) {
+  useStatusBarDim("#919194"); // guide-overlay 딤 .4 색
   return ReactDOM.createPortal(
     <div className="guide-overlay" onClick={onClose}>
       <div className="guide-modal whatsnew-modal" onClick={(e) => e.stopPropagation()}>
