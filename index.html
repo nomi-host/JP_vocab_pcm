@@ -290,7 +290,7 @@ const DAILY_TOTAL = 30;        // 오늘의 학습 하루 총량(복습+신규) 
 const NEW_RATIO_MIN = 0.3;     // 신규 최소 비율(30%) — 복습이 쌓여도 신규 자리 보장
 
 // 앱 버전/배포일 (정식 배포 시 v1.0으로). 통계탭 하단 워터마크 표시.
-const APP_VERSION = "v1.0.4";
+const APP_VERSION = "v1.0.5";
 const APP_BUILD = "2026-07-02";
 const FEEDBACK_EMAIL = "micki.02@kakaopiccoma.com";
 const FEEDBACK_URL = "https://script.google.com/macros/s/AKfycbyCuoe-Oa7hpb4tKlkeyiG3LFVWaLMTZG9M5wUxChsFzI12kGQEaGLhdLyuuAoLhktc/exec"; // 제보 메일 발송용 GAS 웹앱
@@ -2404,11 +2404,11 @@ function DetailModal({ card, onClose, voiceRef, allCards, cards, decks, onToggle
 
   useEffect(() => {
     const onKey = (e) => {
-      if (e.key === "Escape") { if (canBack) goBack(); else onClose(); }
+      if (e.key === "Escape") { if (canBack) goBack(); else requestClose(); }
     };
     document.addEventListener("keydown", onKey);
     return () => document.removeEventListener("keydown", onKey);
-  }, [onClose, canBack]);
+  }, [canBack]);
 
   // 한자 카드 클릭 → 한자 화면을 스택에 push
   const openKanji = (ch) => setStack((s) => [...s, { kind: "kanji", card: cur, kanji: ch }]);
@@ -2424,12 +2424,22 @@ function DetailModal({ card, onClose, voiceRef, allCards, cards, decks, onToggle
 
   // 아래로 스와이프해서 닫기: 본문(bodyRef)이 맨 위로 스크롤된 상태에서 아래로 끌 때만 시트를 같이 끌고,
   // 임계값을 넘기면 닫는다. 스크롤 중이거나 위로 끄는 중엔 원래 스크롤 동작을 그대로 둔다.
-  // 닫힐 때는 즉시 사라지지 않도록, 끌던 위치에서 화면 밖까지 부드럽게 미끄러진 뒤(CLOSE_MS) 실제로 닫는다.
+  // 닫힐 때는(스와이프든 X버튼이든 동일하게) 즉시 사라지지 않도록, 배경(오버레이)은 페이드 아웃하고
+  // 시트는 화면 밖까지 미끄러지듯 내려간 뒤(CLOSE_MS) 실제로 닫는다 — 한 프레임에 통째로 사라지면
+  // iOS에서 헤더 위/아래 영역이 서로 다른 시점에 다시 그려지며 깜빡이는 것처럼 보이는 문제 완화.
   const CLOSE_MS = 220;
   const bodyRef = useRef(null);
   const dragRef = useRef({ startY: 0, dragging: false, dy: 0 });
   const [dragY, setDragY] = useState(0);
   const [closing, setClosing] = useState(false);
+  const closedRef = useRef(false);
+  const requestClose = () => {
+    if (closedRef.current) return;
+    closedRef.current = true;
+    setClosing(true);
+    setDragY((d) => Math.max(d, 2000));
+    setTimeout(onClose, CLOSE_MS);
+  };
   const onSheetTouchStart = (e) => {
     if (e.touches.length !== 1 || closing) return;
     dragRef.current = { startY: e.touches[0].clientY, dragging: false, dy: 0 };
@@ -2452,15 +2462,13 @@ function DetailModal({ card, onClose, voiceRef, allCards, cards, decks, onToggle
     const wasDragging = dragRef.current.dragging, dy = dragRef.current.dy;
     dragRef.current.dragging = false; dragRef.current.dy = 0;
     if (!wasDragging || closing) return;
-    if (dy > 110) {
-      setClosing(true);
-      setDragY(2000); // 끌던 위치에서 화면 밖까지 애니메이션으로 이어서 미끄러지듯 닫힘
-      setTimeout(onClose, CLOSE_MS);
-    } else setDragY(0);
+    if (dy > 110) requestClose();
+    else setDragY(0);
   };
 
   return ReactDOM.createPortal(
-    <div className="kanji-modal-overlay" onClick={closing ? undefined : onClose}>
+    <div className="kanji-modal-overlay" onClick={closing ? undefined : requestClose}
+      style={{ opacity: closing ? 0 : 1, transition: `opacity ${CLOSE_MS}ms ease` }}>
       <div className="kanji-modal" onClick={(e) => e.stopPropagation()}
         onTouchStart={onSheetTouchStart} onTouchMove={onSheetTouchMove} onTouchEnd={onSheetTouchEnd}
         style={{ transform: dragY ? `translateY(${dragY}px)` : undefined,
@@ -2470,7 +2478,7 @@ function DetailModal({ card, onClose, voiceRef, allCards, cards, decks, onToggle
             <button className="kanji-modal-x" onClick={goBack} aria-label="뒤로"><Icon.Back /></button>
           ) : <span style={{ width: 34 }} />}
           <div className="kanji-modal-title">{view === "kanji" ? (sel || word) : word}</div>
-          <button className="kanji-modal-x" onClick={onClose} aria-label="닫기"><Icon.Close /></button>
+          <button className="kanji-modal-x" onClick={requestClose} aria-label="닫기"><Icon.Close /></button>
         </div>
 
         {view === "word" ? (
@@ -6176,7 +6184,7 @@ function FirstRunGuide({ onClose, firstTime }) {
             </div>
           ))}
         </div>
-        <div className="guide-footnote">이 안내는 츠군을 누르면 언제든 다시 확인할 수 있어요.</div>
+        <div className="guide-footnote"><b>이 안내는 우상단 츠군을 누르면 언제든 다시 확인할 수 있어요.</b></div>
         <button className="guide-start" onClick={finish}>{firstTime ? "시작하기" : "다시 학습하러 가기"}</button>
       </div>
     </div>
@@ -6191,7 +6199,7 @@ const WHATSNEW_KEY = "jp-vocab-whatsnew-seen";
 function loadWhatsNewSeen() { try { return localStorage.getItem(WHATSNEW_KEY); } catch (e) { return APP_VERSION; } }
 function saveWhatsNewSeen(v) { try { localStorage.setItem(WHATSNEW_KEY, v); } catch (e) {} }
 const WHATS_NEW = {
-  "v1.0.4": [
+  "v1.0.5": [
     "단어 상세 팝업을 아래로 스와이프하면 닫혀요.",
     "헤더 오른쪽 아이콘을 누르면 처음 사용법 안내를 언제든 다시 볼 수 있어요.",
     "목록 탭 '＋ 새 단어 등록'으로 사전에 없는 단어도 직접 추가할 수 있어요.",
@@ -7364,6 +7372,7 @@ html, body { overscroll-behavior-x: none; overflow: hidden; }
 .guide-item-text b { font-size: 14px; color: var(--ink); }
 .guide-item-text span { font-size: 12.5px; color: var(--ink-2); line-height: 1.45; word-break: keep-all; }
 .guide-footnote { font-size: 12px; color: var(--ink-2); text-align: center; margin: -8px 0 16px; word-break: keep-all; }
+.guide-footnote b { font-weight: 700; color: var(--ink); }
 .guide-start { width: 100%; height: 48px; border: none; border-radius: 14px;
   background: var(--accent); color: var(--on-accent); font-size: 16px; font-weight: 800; cursor: pointer; }
 
